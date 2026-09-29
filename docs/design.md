@@ -45,7 +45,7 @@ remote-computer-use --conn windows type --stdin
 
 PrivateConnectionConfig 与 PublicConnectionInfo 必须分离。公开输出只包括别名、协议、状态、尺寸、尺寸版本、帧序号、支持能力及安全错误码。不输出地址、端口、帐号、密码、令牌、证书材料、配置原文。凭据经私有启动管道传递，不放入子进程 argv。底层日志被拦截，不透传原始库错误，不提供显示秘密的调试开关。
 
-TLS 默认验证服务端证书，可显式配置固定指纹。传统无 TLS VNC 需要显式 allow_unencrypted = true，不自动降级。认证成功不表示桌面已解锁。
+TLS 默认验证服务端证书；当前固定指纹功能仅用于 RDP，替代 CA / 主机名验证。VNC 选择 VeNCrypt X509，配置指纹暂返回 UNSUPPORTED。传统无 TLS VNC 需要显式 allow_unencrypted = true，不自动降级。认证成功不表示桌面已解锁。
 
 ## 生命周期
 
@@ -66,3 +66,9 @@ connect --all 连接当前配置，最多并发 4 个，每项独立返回结果
 验收必须覆盖无 DISPLAY/WAYLAND_DISPLAY、截图颜色与尺寸、增量更新、坐标边界、组合键释放、双击/拖拽/滚轮、Unicode 支持范围、多连接隔离、批量部分失败、错误认证、证书失败、断网、取消、进程崩溃和秘密泄露检查。不能把 mock 测试或 Linux 回环测试当作 macOS/Windows 实机验证；未具备实机时明确记录兼容性待验证。
 
 提交使用 Conventional Commits。每个阶段运行相应测试，保持提交可审阅，不提交配置凭据或构建产物。
+
+## 当前进度
+
+阶段 1–4 已实现并完成 Go 检查和真实 VNC/RDP 回环验证。阶段 5 已提供源码构建、安装说明与共用 Skill，尚未制作可搬运的二进制依赖包，也未完成各 Agent 客户端联调。实际覆盖和未完成项见 [验证记录](validation.md)。
+
+后续优先完成 macOS 屏幕共享、Windows RDP、Linux xrdp 实机矩阵，补齐证书/Unicode/会话策略互操作，然后再扩展本机平台、剪贴板和可选显示。维持两个公开 CLI 的职责边界，不引入与 remote-shell 重叠的任意 shell 执行接口。

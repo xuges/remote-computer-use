@@ -1,0 +1,27 @@
+# Copy to ~/.remote-computer-use/config.toml and chmod 600.
+# Connection names are public aliases. Addresses and credentials are private.
+version = 1
+
+[connections.desktop]
+protocol = "vnc"
+host = "desktop.example.com"
+port = 5900
+password_env = "RCU_DESKTOP_PASSWORD"
+# Legacy VNC authentication does not encrypt the desktop stream.
+# Enable only when deliberately using that transport (for example a private tunnel).
+allow_unencrypted = false
+
+[connections.windows]
+protocol = "rdp"
+host = "windows.example.com"
+port = 3389
+username = "your-user"
+password_env = "RCU_WINDOWS_PASSWORD"
+# domain = "YOUR-DOMAIN"
+width = 1600
+height = 900
+# Optional RDP certificate pin: exactly 64 hexadecimal SHA-256 characters.
+# Obtain it through a trusted channel. Without a pin, system CA and hostname apply.
+# certificate_sha256 = "..."
+
+# password = "..." may be used instead of password_env, never both.
