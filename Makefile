@@ -1,8 +1,9 @@
 GO ?= go
 VERSION ?= dev
 NATIVE_FLAGS ?=
+PREFIX ?= $(HOME)/.remote-computer-use
 
-.PHONY: build test native integration-test integration-rdp-test clean
+.PHONY: build test native install integration-test integration-rdp-test clean
 build:
 	mkdir -p bin
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '-X github.com/xuges/remote-computer-use/internal/app.Version=$(VERSION)' -o bin/remote-computer-ctl ./cmd/remote-computer-ctl
@@ -15,6 +16,12 @@ test:
 native:
 	cmake -S native -B build/native -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(CURDIR)/bin $(NATIVE_FLAGS)
 	cmake --build build/native --parallel 4
+
+# Native runtime dependencies must remain installed in their original prefix.
+install:
+	install -d "$(DESTDIR)$(PREFIX)/bin"
+	install -m 755 bin/remote-computer-ctl bin/remote-computer-use "$(DESTDIR)$(PREFIX)/bin/"
+	install -m 755 bin/libremote-computer-*.so "$(DESTDIR)$(PREFIX)/bin/"
 
 integration-test: build
 	mkdir -p build

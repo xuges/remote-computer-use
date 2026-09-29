@@ -14,8 +14,9 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-CTL = ROOT / 'bin/remote-computer-ctl'
-USE = ROOT / 'bin/remote-computer-use'
+BIN = Path(os.environ.get('RCU_BIN_DIR', ROOT / 'bin'))
+CTL = BIN / 'remote-computer-ctl'
+USE = BIN / 'remote-computer-use'
 
 
 def main():
