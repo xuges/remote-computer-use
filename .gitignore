@@ -1,0 +1,8 @@
+/bin/
+/build/
+/.cache/
+/dist/
+*.so
+*.o
+*.png
+coverage.out
