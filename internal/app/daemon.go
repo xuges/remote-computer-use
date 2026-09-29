@@ -262,6 +262,9 @@ func (s *server) handle(conn net.Conn) {
 			res.OK = true
 		}
 	}
+	if ctx.Err() != nil {
+		res = core.Result{Error: core.Code(canceled(ctx))}
+	}
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	_ = writePacket(conn, res)
 }

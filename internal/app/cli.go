@@ -32,7 +32,11 @@ func emit(v any, j bool) {
 	switch x := v.(type) {
 	case core.Result:
 		if x.Info != nil {
-			emit(*x.Info, false)
+			i := *x.Info
+			if x.Error != "" {
+				i.Error = x.Error
+			}
+			emit(i, false)
 		} else if x.OK {
 			fmt.Fprintln(os.Stdout, "ok")
 		} else {
@@ -259,6 +263,20 @@ func Use(args []string) int {
 	stdin := f.Bool("stdin", false, "")
 	method := f.String("method", "keys", "")
 	if f.Parse(clean) != nil || f.NArg() != 0 || !config.ValidName(*name) || *timeout <= 0 || *timeout > time.Hour {
+		return failure(core.InvalidArgs, *j)
+	}
+	allowed := map[string]string{
+		"screenshot": " output ", "move": " x y ", "click": " x y button count ",
+		"scroll": " dx dy ", "drag": " from to duration ", "key": " ",
+		"type": " text stdin method ",
+	}
+	valid := true
+	f.Visit(func(v *flag.Flag) {
+		if !strings.Contains(" conn json timeout geometry-version "+allowed[op], " "+v.Name+" ") {
+			valid = false
+		}
+	})
+	if !valid {
 		return failure(core.InvalidArgs, *j)
 	}
 	a := core.Action{Kind: op, X: *x, Y: *y, DX: *dx, DY: *dy, Button: *button, Count: *count, Duration: *duration, Chord: chord, Text: *text, Method: *method, Geometry: *geometry}

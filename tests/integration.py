@@ -34,9 +34,9 @@ def main():
             p = subprocess.run([str(binary), *map(str, args)], env=env, input=input, capture_output=True, timeout=40)
             assert b'testpass' not in p.stdout + p.stderr
             assert b'PRIVATE-USER' not in p.stdout + p.stderr
-            if ok:
+            if ok is True:
                 assert p.returncode == 0, (args, p.stdout.decode(errors='replace')[:1000], p.stderr.decode(errors='replace')[:1000])
-            else:
+            elif ok is False:
                 assert p.returncode != 0, args
             return p
 
@@ -105,6 +105,35 @@ allow_unencrypted = true
             assert 'button down 5' in text, text
             data = call(USE, '--conn', 'test', 'screenshot', '--output', '-').stdout
             assert Image.open(io.BytesIO(data)).convert('RGB').getpixel((15, 15)) == (255, 255, 0)
+            # Closing the requesting process must release a button already sent remotely.
+            before = len((tmp / 'events').read_text())
+            dragging = subprocess.Popen([str(USE), '--conn', 'test', 'drag', '--from', '50,60', '--to', '300,300', '--duration', '5s'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            children.append(dragging)
+            for _ in range(100):
+                if 'button down 1 50 60' in (tmp / 'events').read_text()[before:]:
+                    break
+                time.sleep(.02)
+            assert 'button down 1 50 60' in (tmp / 'events').read_text()[before:]
+            dragging.terminate()
+            dragging.wait(timeout=5)
+            for _ in range(100):
+                if 'button up 1' in (tmp / 'events').read_text()[before:]:
+                    break
+                time.sleep(.02)
+            assert 'button up 1' in (tmp / 'events').read_text()[before:]
+            # Resize the actual protocol desktop, then reject coordinates from the old frame.
+            subprocess.run(['xrandr', '--fb', '800x600'], env=desktop_env, capture_output=True, check=True)
+            for _ in range(100):
+                resized = json.loads(call(CTL, 'status', 'test', '--json', ok=None).stdout)
+                if resized['state'] == 'ready' and resized['width'] == 800 and resized['height'] == 600:
+                    break
+                time.sleep(.02)
+            assert resized['width'] == 800 and resized['height'] == 600, resized
+            assert resized['geometry_version'] > state['geometry_version']
+            result = json.loads(call(USE, '--conn', 'test', 'click', '--x', '10', '--y', '10', '--geometry-version', str(state['geometry_version']), '--json', ok=False).stdout)
+            assert result['error'] == 'GEOMETRY_CHANGED', result
+            assert Image.open(io.BytesIO(call(USE, '--conn', 'test', 'screenshot', '--output', '-').stdout)).size == (800, 600)
+            subprocess.run(['xrandr', '--fb', '640x480'], env=desktop_env, capture_output=True, check=True)
             if '--rdp' in sys.argv:
                 shadow = Path(os.environ.get('RCU_SHADOW_SERVER', ROOT / '.cache/freerdp/bin/freerdp-shadow-cli'))
                 assert shadow.exists(), 'set RCU_SHADOW_SERVER to a FreeRDP 3 shadow test server'
@@ -163,7 +192,30 @@ certificate_sha256 = "{'0' * 64}"
                 time.sleep(.2)
                 assert 'button down 1 222 111' in (tmp / 'events').read_text()
                 call(CTL, 'disconnect', 'rdp', '--json')
-                print('PASS: real headless RDP, TLS certificate pinning/rejection, RGB screenshot, pointer and keyboard')
+                rdp_server.terminate()
+                rdp_server.wait(timeout=5)
+                nt_hash = subprocess.run(['openssl', 'dgst', '-md4', '-provider', 'legacy', '-binary'], input='testpass'.encode('utf-16le'), capture_output=True, check=True).stdout.hex()
+                sam = tmp / 'test.sam'
+                sam.write_text(f'PRIVATE-USER:::{nt_hash}:\n')
+                sam.chmod(0o600)
+                rdp_server = subprocess.Popen([str(shadow), f'/port:{rdp_port}', '/bind-address:127.0.0.1', f'/sam-file:{sam}', '/sec:nla', '-rfx', '-nsc', '-gfx', '/log-level:WARN'], env=shadow_env, stdout=shadow_log, stderr=shadow_log)
+                children.append(rdp_server)
+                time.sleep(.3)
+                with Path(env['REMOTE_COMPUTER_CONFIG']).open('a') as f:
+                    f.write(f'''\n[connections.rdpauthbad]
+protocol = "rdp"
+host = "127.0.0.1"
+port = {rdp_port}
+username = "PRIVATE-USER"
+password = "wrong-password"
+certificate_sha256 = "{fingerprint}"
+''')
+                auth = json.loads(call(CTL, 'connect', 'rdpauthbad', '--json', ok=False).stdout)
+                assert auth['error'] == 'AUTH_FAILED', auth
+                call(CTL, 'connect', 'rdp', '--json')
+                call(USE, '--conn', 'rdp', 'screenshot', '--output', '-')
+                call(CTL, 'disconnect', 'rdp', '--json')
+                print('PASS: real headless RDP, TLS certificate pinning/rejection, NLA authentication/rejection, RGB screenshot, pointer and keyboard')
             call(CTL, 'connect', '--all', '--json', ok=False)
             call(CTL, 'status', 'test', '--json')  # batch failure did not roll back
             server.terminate()
@@ -173,7 +225,7 @@ certificate_sha256 = "{'0' * 64}"
             call(CTL, 'disconnect', '--all', '--json')
             call(CTL, 'disconnect', 'test', '--json')
             assert not list((tmp / 'run').glob('*.sock'))
-            print('PASS: real VNC authentication, headless RGB screenshots, input events, incremental frames, geometry guard, batch failure, disconnect and redaction')
+            print('PASS: real VNC authentication, headless RGB screenshots, input events, incremental frames, resize/geometry guard, cancellation, batch failure, disconnect and redaction')
         finally:
             subprocess.run([str(CTL), 'disconnect', '--all', '--json'], env=env, capture_output=True, timeout=15)
             for p in reversed(children):
