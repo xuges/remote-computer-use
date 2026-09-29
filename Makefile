@@ -2,7 +2,7 @@ GO ?= go
 VERSION ?= dev
 NATIVE_FLAGS ?=
 
-.PHONY: build test native integration-test clean
+.PHONY: build test native integration-test integration-rdp-test clean
 build:
 	mkdir -p bin
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '-X github.com/xuges/remote-computer-use/internal/app.Version=$(VERSION)' -o bin/remote-computer-ctl ./cmd/remote-computer-ctl
@@ -20,6 +20,11 @@ integration-test: build
 	mkdir -p build
 	$(CC) -Wall -Wextra tests/desktop.c -o build/test-desktop $$(pkg-config --cflags --libs x11)
 	python3 tests/integration.py
+
+integration-rdp-test: build
+	mkdir -p build
+	$(CC) -Wall -Wextra tests/desktop.c -o build/test-desktop $$(pkg-config --cflags --libs x11)
+	python3 tests/integration.py --rdp
 
 clean:
 	rm -rf bin build

@@ -5,6 +5,10 @@ import json
 import os
 from pathlib import Path
 import socket
+import ssl
+import hashlib
+import sys
+import re
 import subprocess
 import tempfile
 import time
@@ -101,6 +105,65 @@ allow_unencrypted = true
             assert 'button down 5' in text, text
             data = call(USE, '--conn', 'test', 'screenshot', '--output', '-').stdout
             assert Image.open(io.BytesIO(data)).convert('RGB').getpixel((15, 15)) == (255, 255, 0)
+            if '--rdp' in sys.argv:
+                shadow = Path(os.environ.get('RCU_SHADOW_SERVER', ROOT / '.cache/freerdp/bin/freerdp-shadow-cli'))
+                assert shadow.exists(), 'set RCU_SHADOW_SERVER to a FreeRDP 3 shadow test server'
+                listener = socket.socket()
+                listener.bind(('127.0.0.1', 0))
+                rdp_port = listener.getsockname()[1]
+                listener.close()
+                shadow_env = desktop_env | {'XDG_CONFIG_HOME': str(tmp / 'xdg')}
+                shadow_log = (tmp / 'shadow.log').open('wb')
+                rdp_server = subprocess.Popen([str(shadow), f'/port:{rdp_port}', '/bind-address:127.0.0.1', '-auth', '/sec:tls', '-rfx', '-nsc', '-gfx', '/log-level:WARN'], env=shadow_env, stdout=shadow_log, stderr=shadow_log)
+                children.append(rdp_server)
+                for _ in range(100):
+                    certs = list((tmp / 'xdg').rglob('shadow.crt'))
+                    pem = re.search(r'-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----', certs[0].read_text(), re.S) if certs else None
+                    if pem:
+                        break
+                    assert rdp_server.poll() is None, (tmp / 'shadow.log').read_text()[-2000:]
+                    time.sleep(.1)
+                assert pem, 'shadow certificate not generated in test directory'
+                fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem.group())).hexdigest()
+                extra = f'''\n[connections.rdp]
+protocol = "rdp"
+host = "127.0.0.1"
+port = {rdp_port}
+username = "PRIVATE-USER"
+password_env = "RCU_TEST_SECRET"
+certificate_sha256 = "{fingerprint}"
+width = 640
+height = 480
+[connections.untrusted]
+protocol = "rdp"
+host = "127.0.0.1"
+port = {rdp_port}
+username = "PRIVATE-USER"
+password_env = "RCU_TEST_SECRET"
+certificate_sha256 = "{'0' * 64}"
+'''
+                with Path(env['REMOTE_COMPUTER_CONFIG']).open('a') as f:
+                    f.write(extra)
+                time.sleep(.3)
+                rejected = json.loads(call(CTL, 'connect', 'untrusted', '--json', ok=False).stdout)
+                assert rejected['error'] == 'TLS_VERIFY_FAILED', rejected
+                call(CTL, 'connect', 'rdp', '--json')
+                for _ in range(30):
+                    data = call(USE, '--conn', 'rdp', 'screenshot', '--output', '-').stdout
+                    rim = Image.open(io.BytesIO(data)).convert('RGB')
+                    if rim.getpixel((100, 100)) == (255, 0, 0):
+                        break
+                    time.sleep(.1)
+                assert rim.size == (640, 480), rim.size
+                assert rim.getpixel((100, 100)) == (255, 0, 0), rim.getpixel((100, 100))
+                assert rim.getpixel((100, 300)) == (0, 0, 255), rim.getpixel((100, 300))
+                call(USE, '--conn', 'rdp', 'click', '--x', '222', '--y', '111')
+                call(USE, '--conn', 'rdp', 'key', 'CTRL+A')
+                call(USE, '--conn', 'rdp', 'type', '--text', 'Hello')
+                time.sleep(.2)
+                assert 'button down 1 222 111' in (tmp / 'events').read_text()
+                call(CTL, 'disconnect', 'rdp', '--json')
+                print('PASS: real headless RDP, TLS certificate pinning/rejection, RGB screenshot, pointer and keyboard')
             call(CTL, 'connect', '--all', '--json', ok=False)
             call(CTL, 'status', 'test', '--json')  # batch failure did not roll back
             server.terminate()
