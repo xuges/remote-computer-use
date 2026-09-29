@@ -306,7 +306,9 @@ func Worker() int {
 	defer cancel()
 	s := &server{name: start.Name, protocol: start.Config.Protocol, dir: dir, state: "connecting", gate: make(chan struct{}, 1), ctx: ctx, cancel: cancel}
 	var handlers sync.WaitGroup
+	accepted := make(chan struct{})
 	go func() {
+		defer close(accepted)
 		for {
 			c, e := l.Accept()
 			if e != nil {
@@ -320,6 +322,7 @@ func Worker() int {
 	if e != nil {
 		l.Close()
 		cancel()
+		<-accepted
 		handlers.Wait()
 		i := s.info()
 		i.State = "failed"
@@ -352,6 +355,7 @@ func Worker() int {
 			saveInfo(dir, i)
 			l.Close()
 			cancel()
+			<-accepted
 			handlers.Wait()
 			return fail(i.Error)
 		}
@@ -359,6 +363,7 @@ func Worker() int {
 	}
 	<-ctx.Done()
 	l.Close()
+	<-accepted
 	handlers.Wait()
 	i := core.Info{Name: start.Name, Protocol: start.Config.Protocol, State: "stopped"}
 	saveInfo(dir, i)
