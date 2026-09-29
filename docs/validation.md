@@ -16,9 +16,18 @@
 
 测试实现位于 `tests/integration.py` 与 `internal/*/*_test.go`。真实服务只绑定回环地址，使用临时配置和测试凭据，退出后清理。
 
+## 用户配置的实机验证
+
+在用户授权下，对其本机私有配置中的两个别名进行了连接与截图验证，未发送键鼠事件，也未修改配置：
+
+- `mac`：VNC 连接成功，获取并解码 1650×1050 PNG，画面不是单色；实机键鼠操作尚未验证。
+- `windows`：TCP 端口可达，但 RDP 协商返回 `SSL_NOT_ALLOWED_BY_SERVER`（0x00000002），服务端只接受 Standard RDP Security。当前客户端要求 TLS / NLA，故在认证前失败，尚不能判断帐号密码是否正确。
+
+测试后已断开这两个连接。此记录不包含主机地址、帐号、凭据或远端截图。
+
 ## 待验证与暂不实现
 
-- macOS 屏幕共享 / ARD、Windows RDP、Linux xrdp 实机兼容性。
+- macOS 屏幕共享 / ARD 的完整键鼠与文本验收、Windows RDP 和 Linux xrdp 实机兼容性。
 - VNC VeNCrypt X509 的完整证书链与主机名互操作；RDP 企业 CA、域帐号与服务器会话策略。
 - 非拉丁文字、emoji、键盘布局和输入法组合；目前协议级实现 Unicode，不能由 ASCII 测试推断全部应用兼容。
 - 长时间运行、网络抖动、大分辨率负载和原生库 sanitizer 测试；Go race detector 不覆盖 C 层。
