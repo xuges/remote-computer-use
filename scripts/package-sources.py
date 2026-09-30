@@ -59,7 +59,11 @@ def main():
         if not module.get('Main'):
             if 'Replace' in module:
                 raise SystemExit('review source collection for replaced Go modules')
-            shutil.copytree(module['Dir'], package / 'go-modules' / (module['Path'] + '@' + module['Version']), dirs_exist_ok=True)
+            copied = package / 'go-modules' / (module['Path'] + '@' + module['Version'])
+            shutil.copytree(module['Dir'], copied, dirs_exist_ok=True)
+            # The Go cache is read-only. Normalize only our copied source tree.
+            for path in [copied, *copied.rglob('*')]:
+                path.chmod(path.stat().st_mode | 0o200)
     (package / 'README.md').write_text(
         '# Corresponding sources\n\n'
         'index.json maps each platform to exact native source packages and hashes.\n'
