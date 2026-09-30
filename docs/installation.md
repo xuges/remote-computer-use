@@ -35,7 +35,9 @@ remote-computer-use --conn mac screenshot --output screen.png
 
 macOS 使用对应的 `darwin-arm64.tar.gz`，校验命令为 `shasum -a 256 -c 包名.sha256`，安装参数与 Linux 相同。当前开发包使用 ad-hoc 签名，不能视为已完成公开分发的系统信任验收。
 
-Windows 下载 `windows-amd64.zip`，通过 `Get-FileHash -Algorithm SHA256 包名.zip` 对照 `.sha256`，解压后执行：
+本轮 Windows 包在早先测试通过后，最终复测被 Defender ASR 高级勒索软件防护规则拦截，当前不能视为开箱即用发行版。安装器不更改安全策略；应由机器管理员审核签名/信誉与信任策略，详见 [验证记录](validation.md)。
+
+Windows 开发包使用 `windows-amd64.zip`，通过 `Get-FileHash -Algorithm SHA256 包名.zip` 对照 `.sha256`，解压后执行：
 
 ```powershell
 powershell -File .\install.ps1

@@ -1,6 +1,6 @@
 # 本机跨平台支持
 
-状态：已实现四个构建目标，2026-09-30。Linux x64、macOS arm64、Windows x64 使用现有机器验证；Linux arm64 使用 Ubuntu 22.04 ARM64 用户空间和 QEMU 验证，尚无 ARM Linux 实机验收。开发包未在线发布。
+状态：已实现四个构建目标，2026-09-30。Linux x64、macOS arm64、Windows x64 使用现有机器验证；Linux arm64 使用 Ubuntu 22.04 ARM64 用户空间和 QEMU 验证，尚无 ARM Linux 实机验收。开发包未在线发布。Windows 在先前测试通过后，最终重建复测被本机 Defender ASR 拦截；当前不能宣称 Windows 包开箱即用，详见验证记录。
 
 ## 平台矩阵
 

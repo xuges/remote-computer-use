@@ -137,3 +137,11 @@ Windows 在本机回连自身 RDP 时返回 `AUTH_FAILED`，与从 Linux/Mac 连
 发行包分别包含 Linux x64 41 个、Linux arm64 41 个、Mac 25 个、Windows 42 个原生库。Mac 最低系统版本从 Mach-O 部署命令推导为 15.0；包使用 ad-hoc 签名，尚无 Developer ID/公证和下载隔离属性测试。GitHub 四平台工作流已配置但未触发，不能把本地执行结果写成 CI 已通过。
 
 升级注意：本次 HTTP worker 与旧 Unix socket worker 不互通。先用旧 ctl 断开，再使用新 CLI 重连；令牌仅保存在私有 endpoint 文件，不进入 ctl 查询输出。
+
+### 最终 Windows 重建复测的 ASR 拦截
+
+Windows 早先的完整安装/VNC 操作测试与 RDP shadow NLA 测试确实通过。最终重建后再次执行安装测试，`ctl doctor` 通过，但启动 `remote-computer-use.exe --version` 被系统拒绝；此前通过的旧 EXE 随后也遭到相同拒绝。因此上表 Windows 的“通过”描述的是拦截发生前的结果，**最终包当前在该机器上不能完成安装复测**。
+
+文件 ACL 检查确认当前用户具备 FullControl，未发现文件权限错误。Windows Defender Operational 日志记录事件 1121，规则 GUID 为 `C1DB55AB-C21A-4637-BB3F-A12568109D35`；对应微软的 [Use advanced protection against ransomware](https://learn.microsoft.com/en-us/defender-endpoint/attack-surface-reduction-rules-reference#use-advanced-protection-against-ransomware)。这是已观察到的 ASR 拦截，不据此声称文件被确认含有恶意代码，也不能在没有进一步证据时断言具体触发行为。
+
+最终 Windows 包中 use.exe 的 SHA-256：`3d3f5071b6708833d55aa5f603d06edceb3cb50a9c2580476a586666c13f5de1`。本轮未关闭 Defender、未添加排除项、未修改服务端认证策略。Windows 开箱即用验收仍需解决正式签名/文件信誉或由机器管理员审核信任策略，再重跑测试；当前产物仅作为开发验证包交付。
