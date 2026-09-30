@@ -200,6 +200,19 @@ static int send_event(vnc_state *v, rcu_event e) {
         ok = vnc_connection_key_event(c, e.c, e.a, 0);
     else if (e.kind == 3) {
         uint32_t k = e.a;
+        // Apple's ARD server consumes UTF-16 units in Unicode keysyms and
+        // silently drops non-BMP scalar keysyms. Keep the surrogate pair in
+        // one queued event so cancellation cannot interrupt it between units.
+        // Other VNC servers expect the standard full Unicode scalar instead.
+        if (v->ard && k > 0xffff && k <= 0x10ffff) {
+            uint32_t high = 0x0100d800 | ((k - 0x10000) >> 10);
+            uint32_t low = 0x0100dc00 | ((k - 0x10000) & 0x3ff);
+            ok = vnc_connection_key_event(c, TRUE, high, 0) &&
+                 vnc_connection_key_event(c, FALSE, high, 0) &&
+                 vnc_connection_key_event(c, TRUE, low, 0) &&
+                 vnc_connection_key_event(c, FALSE, low, 0);
+            return ok ? 1 : RCU_LOST;
+        }
         if (k > 255)
             k |= 0x01000000;
         ok = vnc_connection_key_event(c, TRUE, k, 0) && vnc_connection_key_event(c, FALSE, k, 0);
