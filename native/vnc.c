@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <vncbaseframebuffer.h>
 #include <vncconnection.h>
 
@@ -273,12 +272,12 @@ reconnect:
         rcu_event e;
         if (rcu_take(s, &e))
             rcu_complete(s, e.id, send_event(&v, e));
-        usleep(2000);
+        g_usleep(2000);
     }
     vnc_connection_shutdown(v.conn);
     while (vnc_connection_is_open(v.conn)) {
         g_main_context_iteration(NULL, FALSE);
-        usleep(1000);
+        g_usleep(1000);
     }
     g_object_unref(v.conn);
     free(v.buffer);

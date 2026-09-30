@@ -77,7 +77,7 @@ func TestConcurrentExtractionAndReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatal("unsafe file mode")
 	}
 	// Cache hit does not need to decompress the archive again.
@@ -93,6 +93,9 @@ func TestConcurrentExtractionAndReuse(t *testing.T) {
 func TestRejectUnsafeOrCorruptCache(t *testing.T) {
 	for _, kind := range []string{"content", "symlink", "directory-mode", "file-mode"} {
 		t.Run(kind, func(t *testing.T) {
+			if runtime.GOOS == "windows" && (kind == "file-mode" || kind == "directory-mode" || kind == "symlink") {
+				t.Skip("POSIX mode/symlink test; Windows ACL tested separately")
+			}
 			m, a := fixture(t, "libtest.so", tar.TypeReg)
 			base := filepath.Join(t.TempDir(), "cache")
 			d, e := unpack(base, m, a)
@@ -153,6 +156,9 @@ func TestRejectUnsafeArchiveAndPlatform(t *testing.T) {
 }
 
 func TestRejectSymlinkCacheRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires Windows developer mode")
+	}
 	m, a := fixture(t, "libtest.so", tar.TypeReg)
 	base := t.TempDir()
 	target := filepath.Join(base, "target")

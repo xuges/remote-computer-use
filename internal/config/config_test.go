@@ -3,8 +3,10 @@ package config
 import (
 	"encoding/json"
 	"github.com/xuges/remote-computer-use/internal/core"
+	"github.com/xuges/remote-computer-use/internal/host"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -19,9 +21,17 @@ func TestConfigRejectsAmbiguityAndProtectsSecrets(t *testing.T) {
 		{"valid", "", 0600, true}, {"unknown", "typo = 1\n", 0600, false}, {"world-readable", "", 0644, false}, {"conflicting credentials", "password_env = 'MY_PASS'\n", 0600, false}, {"bad port", "port = 99999\n", 0600, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if runtime.GOOS == "windows" && tc.name == "world-readable" {
+				t.Skip("POSIX mode test; Windows ACL tested separately")
+			}
 			p := filepath.Join(t.TempDir(), "config.toml")
 			if e := os.WriteFile(p, []byte(base+tc.extra), tc.mode); e != nil {
 				t.Fatal(e)
+			}
+			if runtime.GOOS == "windows" {
+				if err := host.Protect(p, false); err != nil {
+					t.Fatal(err)
+				}
 			}
 			f, e := Load(p)
 			if tc.valid {
@@ -53,6 +63,11 @@ func TestTLSVerificationPolicy(t *testing.T) {
 			body := "version = 1\n[connections.test]\nprotocol = '" + tc.protocol + "'\nhost = 'test.invalid'\n" + tc.extra
 			if err := os.WriteFile(p, []byte(body), 0600); err != nil {
 				t.Fatal(err)
+			}
+			if runtime.GOOS == "windows" {
+				if err := host.Protect(p, false); err != nil {
+					t.Fatal(err)
+				}
 			}
 			f, err := Load(p)
 			if !tc.valid {

@@ -112,8 +112,8 @@ func Ctl(args []string) int {
 	}
 	entries, _ := os.ReadDir(dir)
 	for _, entry := range entries {
-		if strings.HasSuffix(entry.Name(), ".sock") {
-			n := strings.TrimSuffix(entry.Name(), ".sock")
+		if strings.HasSuffix(entry.Name(), ".sock") || strings.HasSuffix(entry.Name(), ".json") {
+			n := strings.TrimSuffix(strings.TrimSuffix(entry.Name(), ".sock"), ".json")
 			if config.ValidName(n) {
 				names[n] = true
 			}

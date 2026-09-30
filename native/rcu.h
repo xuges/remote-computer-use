@@ -4,7 +4,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef _WIN32
+#define RCU_API __declspec(dllexport)
+#else
 #define RCU_API __attribute__((visibility("default")))
+#endif
 #define RCU_MAX_PIXELS (16u * 1024u * 1024u)
 enum {
     RCU_CONNECT = -1,

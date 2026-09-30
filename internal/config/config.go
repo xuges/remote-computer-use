@@ -3,6 +3,7 @@ package config
 import (
 	"github.com/BurntSushi/toml"
 	"github.com/xuges/remote-computer-use/internal/core"
+	"github.com/xuges/remote-computer-use/internal/host"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -48,8 +49,7 @@ func DefaultPath() string {
 
 func Load(path string) (File, error) {
 	var f File
-	st, err := os.Stat(path)
-	if err != nil || !st.Mode().IsRegular() || st.Mode().Perm()&0077 != 0 {
+	if err := host.CheckPrivate(path, false); err != nil {
 		return f, core.InvalidConfig
 	}
 	b, err := os.ReadFile(path)

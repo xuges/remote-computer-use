@@ -10,12 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/xuges/remote-computer-use/internal/host"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 )
 
 var errBundle = errors.New("invalid native runtime bundle or cache")
@@ -64,18 +64,6 @@ func Directory() (string, error) {
 	return unpack(base, manifest, archive)
 }
 
-func privateDir(path string) error {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !info.IsDir() || info.Mode().Perm()&0077 != 0 || !ok || stat.Uid != uint32(os.Geteuid()) {
-		return errBundle
-	}
-	return nil
-}
-
 func parse(data []byte) (metadata, error) {
 	var m metadata
 	if err := json.Unmarshal(data, &m); err != nil {
@@ -88,10 +76,10 @@ func parse(data []byte) (metadata, error) {
 	var total int64
 	for _, f := range m.Files {
 		hash, err := hex.DecodeString(f.SHA256)
-		if f.Name == "" || f.Name == "." || f.Name == ".." || strings.ContainsAny(f.Name, "/\\") || seen[f.Name] || f.Size <= 0 || f.Size > 128<<20 || err != nil || len(hash) != sha256.Size {
+		if f.Name == "" || f.Name == "." || f.Name == ".." || strings.TrimRight(f.Name, " .") != f.Name || !safeLibraryName(f.Name) || strings.ContainsAny(f.Name, "/\\:\x00") || seen[strings.ToLower(f.Name)] || f.Size <= 0 || f.Size > 128<<20 || err != nil || len(hash) != sha256.Size {
 			return m, errBundle
 		}
-		seen[f.Name] = true
+		seen[strings.ToLower(f.Name)] = true
 		total += f.Size
 	}
 	if total > 256<<20 {
@@ -101,7 +89,7 @@ func parse(data []byte) (metadata, error) {
 }
 
 func verify(dir string, m metadata) error {
-	if err := privateDir(dir); err != nil {
+	if err := host.CheckPrivate(dir, true); err != nil {
 		return err
 	}
 	entries, err := os.ReadDir(dir)
@@ -111,7 +99,7 @@ func verify(dir string, m metadata) error {
 	for _, f := range m.Files {
 		path := filepath.Join(dir, f.Name)
 		info, err := os.Lstat(path)
-		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() != f.Size {
+		if err != nil || !info.Mode().IsRegular() || host.CheckPrivate(path, false) != nil || info.Size() != f.Size {
 			return errBundle
 		}
 		in, err := os.Open(path)
@@ -133,10 +121,10 @@ func unpack(base string, manifest, archive []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err = os.MkdirAll(base, 0700); err != nil {
+	if err = host.MkdirPrivate(base); err != nil {
 		return "", err
 	}
-	if err = privateDir(base); err != nil {
+	if err = host.CheckPrivate(base, true); err != nil {
 		return "", err
 	}
 	id := fmt.Sprintf("%x", sha256.Sum256(manifest))
@@ -153,6 +141,9 @@ func unpack(base string, manifest, archive []byte) (string, error) {
 		return "", err
 	}
 	defer os.RemoveAll(tmp)
+	if err = host.Protect(tmp, true); err != nil {
+		return "", err
+	}
 	zipped, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
 		return "", err
@@ -185,6 +176,9 @@ func unpack(base string, manifest, archive []byte) (string, error) {
 		if copyErr != nil || closeErr != nil {
 			return "", errBundle
 		}
+		if err = host.Protect(filepath.Join(tmp, h.Name), false); err != nil {
+			return "", err
+		}
 	}
 	if len(expected) != 0 {
 		return "", errBundle
@@ -202,4 +196,22 @@ func unpack(base string, manifest, archive []byte) (string, error) {
 		}
 	}
 	return dir, nil
+}
+
+// Library basenames are portable across filesystems, including Windows device
+// names and alternate data streams. The manifest never carries arbitrary paths.
+func safeLibraryName(name string) bool {
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("._+-", r)) {
+			return false
+		}
+	}
+	base := strings.ToUpper(strings.SplitN(name, ".", 2)[0])
+	if base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" {
+		return false
+	}
+	if len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) && base[3] >= '1' && base[3] <= '9' {
+		return false
+	}
+	return true
 }

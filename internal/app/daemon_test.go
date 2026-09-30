@@ -1,7 +1,8 @@
 package app
 
 import (
-	"net"
+	"encoding/json"
+	"net/http"
 	"path/filepath"
 	"testing"
 	"time"
@@ -23,24 +24,16 @@ func TestStopWaitsForBackendCleanup(t *testing.T) {
 			}
 			defer lock.Close()
 			if !missingSocket {
-				l, err := net.Listen("unix", socketPath(dir, "test"))
+				l, err := listenLocal(dir, "test")
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer l.Close()
-				go func() {
-					c, err := l.Accept()
-					if err != nil {
-						return
-					}
-					defer c.Close()
-					var req core.Request
-					if readPacket(c, &req) != nil {
-						return
-					}
-					_ = writePacket(c, core.Result{OK: true, Info: &core.Info{Name: "test", State: "stopped"}})
-					l.Close() // Native backend still holds the worker lock.
-				}()
+				srv := &http.Server{Handler: rpcHandler(l.endpoint, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_ = json.NewEncoder(w).Encode(core.Result{OK: true, Info: &core.Info{Name: "test", State: "stopped"}})
+				}))}
+				defer srv.Close()
+				go srv.Serve(l)
 			}
 			done := make(chan core.Result, 1)
 			go func() { done <- stop(dir, "test") }()

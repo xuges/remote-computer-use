@@ -1,10 +1,13 @@
 #include "rcu.h"
-#include <arpa/inet.h>
+#include "trust.h"
 #include <freerdp/error.h>
 #include <freerdp/freerdp.h>
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/input.h>
 #include <freerdp/settings.h>
+#ifdef _WIN32
+#undef X509_NAME
+#endif
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
 #include <stdio.h>
@@ -44,27 +47,13 @@ static int verify(freerdp *i, const BYTE *data, size_t length, const char *host,
             valid = strcmp(hex, s->fingerprint) == 0;
         }
     } else if (cert) {
-        X509_STORE *store = X509_STORE_new();
-        X509_STORE_CTX *ctx = X509_STORE_CTX_new();
         STACK_OF(X509) *chain = sk_X509_new_null();
         X509 *next;
         if (chain)
             while ((next = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL)
                 sk_X509_push(chain, next);
-        if (store && ctx && chain && X509_STORE_set_default_paths(store) &&
-            X509_STORE_CTX_init(ctx, store, cert, chain)) {
-            X509_VERIFY_PARAM *p = X509_STORE_CTX_get0_param(ctx);
-            unsigned char ip[16];
-            int numeric = inet_pton(AF_INET, host, ip) == 1 || inet_pton(AF_INET6, host, ip) == 1;
-            int named = numeric ? X509_VERIFY_PARAM_set1_ip_asc(p, host)
-                                : X509_VERIFY_PARAM_set1_host(p, host, 0);
-            X509_VERIFY_PARAM_set_purpose(p, X509_PURPOSE_SSL_SERVER);
-            if (named)
-                valid = X509_verify_cert(ctx) == 1;
-        }
+        if (chain) valid = rcu_system_trust(cert, chain, host);
         sk_X509_pop_free(chain, X509_free);
-        X509_STORE_CTX_free(ctx);
-        X509_STORE_free(store);
     }
     X509_free(cert);
     BIO_free(bio);

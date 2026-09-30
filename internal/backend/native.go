@@ -27,7 +27,7 @@ type native struct {
 }
 
 func Open(c config.Private) (Backend, error) {
-	if runtime.GOOS != "linux" {
+	if !supportedPlatform() {
 		return nil, core.Unsupported
 	}
 	dir, e := runtimebundle.Directory()
@@ -37,7 +37,7 @@ func Open(c config.Private) (Backend, error) {
 	if c.Protocol != "vnc" && c.Protocol != "rdp" {
 		return nil, core.InvalidConfig
 	}
-	lib, e := ffi.LoadLibrary(filepath.Join(dir, "libremote-computer-"+c.Protocol+".so"))
+	lib, e := loadLibrary(filepath.Join(dir, libraryName(c.Protocol)))
 	if e != nil {
 		return nil, core.MissingBackend
 	}
@@ -87,7 +87,7 @@ func Open(c config.Private) (Backend, error) {
 // Check loads each adapter and its dependencies without opening a connection
 // or reading configuration. Callers expose only our public error codes.
 func Check(protocol string) error {
-	if runtime.GOOS != "linux" {
+	if !supportedPlatform() {
 		return core.Unsupported
 	}
 	if protocol != "vnc" && protocol != "rdp" {
@@ -97,7 +97,7 @@ func Check(protocol string) error {
 	if err != nil {
 		return core.MissingBackend
 	}
-	lib, err := ffi.LoadLibrary(filepath.Join(dir, "libremote-computer-"+protocol+".so"))
+	lib, err := loadLibrary(filepath.Join(dir, libraryName(protocol)))
 	if err != nil {
 		return core.MissingBackend
 	}
@@ -217,4 +217,18 @@ func (n *native) Close() {
 		n.handle = 0
 		n.lib.Close()
 	}
+}
+
+func supportedPlatform() bool {
+	return (runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")) || (runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") || (runtime.GOOS == "windows" && runtime.GOARCH == "amd64")
+}
+func libraryName(protocol string) string {
+	ext := ".so"
+	if runtime.GOOS == "darwin" {
+		ext = ".dylib"
+	}
+	if runtime.GOOS == "windows" {
+		ext = ".dll"
+	}
+	return "libremote-computer-" + protocol + ext
 }

@@ -1,6 +1,7 @@
 #include "rcu.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 uint32_t rcu_abi_version(void) {
     return 2;
@@ -8,6 +9,12 @@ uint32_t rcu_abi_version(void) {
 rcu *rcu_open(const char *host, uint32_t port, const char *user, const char *password,
               const char *domain, const char *fingerprint, uint32_t width, uint32_t height,
               uint32_t plain, uint32_t skip_tls_verify) {
+#ifdef _WIN32
+    // The worker already moved its startup reply to a private Win32 handle.
+    // Silence the C runtime streams as well as the Win32 standard handles.
+    (void)freopen("NUL", "w", stdout);
+    (void)freopen("NUL", "w", stderr);
+#endif
     rcu *s = calloc(1, sizeof(*s));
     if (!s)
         return NULL;

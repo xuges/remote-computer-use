@@ -10,7 +10,9 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -24,19 +26,6 @@ type startup struct {
 	Name    string
 	Config  config.Private
 	Timeout time.Duration
-}
-
-func lockFile(path string) (*os.File, error) {
-	fd, e := syscall.Open(path, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
-	if e != nil {
-		return nil, core.IOError
-	}
-	f := os.NewFile(uintptr(fd), path)
-	if e = syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
-		f.Close()
-		return nil, core.NotReady
-	}
-	return f, nil
 }
 
 func saveInfo(dir string, i core.Info) {
@@ -96,7 +85,7 @@ func connect(dir, name string, c config.Private, timeout time.Duration) core.Res
 		return core.Result{Error: core.IOError}
 	}
 	cmd := exec.Command(exe, "--worker")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	detach(cmd)
 	data, _ := json.Marshal(startup{Name: name, Config: c, Timeout: timeout})
 	cmd.Stdin = bytes.NewReader(data)
 	devnull, e := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
@@ -151,18 +140,16 @@ func stop(dir, name string) core.Result {
 		return r
 	}
 	for j := 0; j < 100; j++ {
-		if _, e := os.Lstat(socketPath(dir, name)); os.IsNotExist(e) {
-			// The listener disappears before native backend cleanup finishes.
-			// Wait for the worker lock too, so an immediate connect can start.
-			lock, e := lockFile(filepath.Join(dir, name+".lock"))
-			if e == nil {
-				saveInfo(dir, *r.Info)
-				lock.Close()
-				return r
-			}
-			if e != core.NotReady {
-				return core.Result{Error: core.Code(e)}
-			}
+		// This lifetime lock covers both the listener and native cleanup,
+		// including named pipes which have no filesystem socket to inspect.
+		lock, e := lockFile(filepath.Join(dir, name+".lock"))
+		if e == nil {
+			saveInfo(dir, *r.Info)
+			lock.Close()
+			return r
+		}
+		if e != core.NotReady {
+			return core.Result{Error: core.Code(e)}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -203,17 +190,19 @@ func (s *server) info() core.Info {
 	return i
 }
 
-func (s *server) handle(conn net.Conn) {
-	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+func (s *server) handle(w http.ResponseWriter, request *http.Request) {
 	var req core.Request
-	if readPacket(conn, &req) != nil {
+	request.Body = http.MaxBytesReader(w, request.Body, maxPacket)
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(10 * time.Second))
+	decoder := json.NewDecoder(request.Body)
+	if decoder.Decode(&req) != nil || decoder.Decode(new(any)) != io.EOF {
+		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	conn.SetReadDeadline(time.Time{})
+	_ = http.NewResponseController(w).SetReadDeadline(time.Time{})
 	if req.Operation == "status" {
 		i := s.info()
-		_ = writePacket(conn, core.Result{OK: true, Info: &i})
+		_ = json.NewEncoder(w).Encode(core.Result{OK: true, Info: &i})
 		return
 	}
 	if req.Operation == "disconnect" {
@@ -221,25 +210,23 @@ func (s *server) handle(conn net.Conn) {
 		s.state = "disconnecting"
 		s.mu.Unlock()
 		i := core.Info{Name: s.name, Protocol: s.protocol, State: "stopped"}
-		_ = writePacket(conn, core.Result{OK: true, Info: &i})
+		_ = json.NewEncoder(w).Encode(core.Result{OK: true, Info: &i})
 		s.cancel()
 		return
 	}
 	if req.Operation != "action" {
-		_ = writePacket(conn, core.Result{Error: core.InvalidArgs})
+		_ = json.NewEncoder(w).Encode(core.Result{Error: core.InvalidArgs})
 		return
 	}
 	if req.Timeout <= 0 || req.Timeout > time.Hour {
 		req.Timeout = 10 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(s.ctx, req.Timeout)
+	ctx, cancel := context.WithTimeout(request.Context(), req.Timeout)
 	defer cancel()
-	// A closed requesting socket cancels an in-flight operation.
-	go func() { var b [1]byte; _, _ = conn.Read(b[:]); cancel() }()
 	select {
 	case s.gate <- struct{}{}:
 	case <-ctx.Done():
-		_ = writePacket(conn, core.Result{Error: core.Code(canceled(ctx))})
+		_ = json.NewEncoder(w).Encode(core.Result{Error: core.Code(canceled(ctx))})
 		return
 	}
 	defer func() { <-s.gate }()
@@ -274,8 +261,8 @@ func (s *server) handle(conn net.Conn) {
 	if ctx.Err() != nil {
 		res = core.Result{Error: core.Code(canceled(ctx))}
 	}
-	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	_ = writePacket(conn, res)
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Second))
+	_ = json.NewEncoder(w).Encode(res)
 }
 
 func Worker() int {
@@ -284,19 +271,11 @@ func Worker() int {
 		return 1
 	}
 	// Preserve a private ready pipe, then silence native stdout/stderr before loading libraries.
-	fd, e := syscall.Dup(1)
+	ready, e := startupPipe()
 	if e != nil {
 		return 1
 	}
-	ready := os.NewFile(uintptr(fd), "startup")
 	defer ready.Close()
-	null, e := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-	if e != nil {
-		return 1
-	}
-	_ = syscall.Dup2(int(null.Fd()), 1)
-	_ = syscall.Dup2(int(null.Fd()), 2)
-	null.Close()
 	fail := func(code core.Error) int { _ = json.NewEncoder(ready).Encode(core.Result{Error: code}); return 1 }
 	dir, e := runtimeDir()
 	if e != nil {
@@ -307,35 +286,30 @@ func Worker() int {
 		return fail(core.Code(e))
 	}
 	defer lock.Close()
-	_ = os.Remove(socketPath(dir, start.Name))
-	l, e := net.Listen("unix", socketPath(dir, start.Name))
+	l, e := listenLocal(dir, start.Name)
 	if e != nil {
 		return fail(core.IOError)
 	}
 	defer l.Close()
-	_ = os.Chmod(socketPath(dir, start.Name), 0600)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 	s := &server{name: start.Name, protocol: start.Config.Protocol, dir: dir, state: "connecting", gate: make(chan struct{}, 1), ctx: ctx, cancel: cancel}
-	var handlers sync.WaitGroup
+	httpServer := &http.Server{Handler: rpcHandler(l.endpoint, http.HandlerFunc(s.handle)), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0), BaseContext: func(net.Listener) context.Context { return ctx }}
 	accepted := make(chan struct{})
-	go func() {
-		defer close(accepted)
-		for {
-			c, e := l.Accept()
-			if e != nil {
-				return
-			}
-			handlers.Add(1)
-			go func() { defer handlers.Done(); s.handle(c) }()
+	go func() { defer close(accepted); _ = httpServer.Serve(l) }()
+	shutdown := func() {
+		cancel()
+		shutdownCtx, done := context.WithTimeout(context.Background(), 5*time.Second)
+		defer done()
+		if httpServer.Shutdown(shutdownCtx) != nil {
+			_ = httpServer.Close()
 		}
-	}()
+		<-accepted
+	}
+
 	b, e := backend.Open(start.Config)
 	if e != nil {
-		l.Close()
-		cancel()
-		<-accepted
-		handlers.Wait()
+		shutdown()
 		i := s.info()
 		i.State = "failed"
 		i.Error = core.Code(e)
@@ -355,6 +329,7 @@ func Worker() int {
 	for {
 		i := s.info()
 		if i.State == "ready" {
+			saveInfo(dir, i)
 			_ = json.NewEncoder(ready).Encode(core.Result{OK: true, Info: &i})
 			ready.Close()
 			break
@@ -365,18 +340,13 @@ func Worker() int {
 			}
 			i.State = "failed"
 			saveInfo(dir, i)
-			l.Close()
-			cancel()
-			<-accepted
-			handlers.Wait()
+			shutdown()
 			return fail(i.Error)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	<-ctx.Done()
-	l.Close()
-	<-accepted
-	handlers.Wait()
+	shutdown()
 	i := core.Info{Name: start.Name, Protocol: start.Config.Protocol, State: "stopped"}
 	saveInfo(dir, i)
 	return 0
