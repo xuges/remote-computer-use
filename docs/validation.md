@@ -14,10 +14,22 @@
 | 真实 RDP 回环 | TLS、默认拒绝自签名证书、固定证书指纹与错误指纹拒绝、显式跳过证书校验、NLA 正确/错误密码、RGB PNG、鼠标/键盘/正负双轴滚轮事件 |
 | 生命周期 | 重复连接/断开、并行 VNC/RDP 会话、批量部分失败保留健康会话、服务端断开后操作失败、全部断开清理 socket |
 | 脱敏与后台运行 | CLI 无 DISPLAY/WAYLAND_DISPLAY、输出不包含测试帐号和密码、公开状态不包含地址与凭据字段 |
+| 发行包缓存 | 并发首次解压、重复使用、损坏与不安全权限拒绝、符号链接/路径穿越/错误架构拒绝、显式外部库覆盖 |
+| 离线安装 | 路径含空格、重复安装、已有配置保留与新配置 0600、三种 Skill 路径、已有不同 Skill/无关命令不覆盖 |
 
 本次执行：`make test`、`make native-input-test`、`make integration-rdp-test` 均通过。构建使用 `build/native-headless` 下的 CMake 配置。测试服务只绑定回环地址，使用临时配置和测试凭据，退出后清理。
 
 FreeRDP shadow 的水平滚轮映射与 Windows 实机方向不同；回环测试明确检查 shadow 的事件行为，不能由它推断 Windows 的方向。实机另用浏览器页面实际滚动位置验证。
+
+## 自包含发行包验证（2026-09-30）
+
+在 Ubuntu 22.04 amd64 构建，收集 41 个原生库，压缩资源约 22.5 MiB；ctl 约 27 MiB、use 约 3.3 MiB，最终 `.tar.gz` 约 26 MiB。只携带两个 CLI 也可以自检和连接，无需旁置适配库或原构建路径。
+
+`tests/package.py --chroot` 创建仅含宿主 glibc/加载器和发行版 CLI 的临时根目录，以普通 UID 运行 `doctor`，VNC/RDP 均就绪。隔离目录没有 FreeRDP、libgvnc、OpenSSL 系统安装，也没有挂载仓库。该检查验证库加载与 ABI，不替代远端功能测试。
+
+另将 `RCU_BIN_DIR` 指向解压后的发行版，执行 `tests/integration.py --rdp`：真实 VNC 截图与键鼠、认证回退、尺寸变化、取消和生命周期，以及 RDP TLS、指纹、自签名显式跳过、NLA 正确/错误认证、截图和键鼠均通过。测试使用临时桌面，没有操作用户配置的三台主机。
+
+离线安装测试在临时 HOME 下完成，未改动用户的真实配置、PATH 或 Skill。GitHub 手动工作流已编写，尚未在 GitHub 执行；目前产物未发布。其他 Linux 发行版、CA 信任库和企业认证扩展仍需分别验证。
 
 ## 三台配置主机实测（2026-09-30）
 

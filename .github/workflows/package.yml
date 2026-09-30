@@ -1,0 +1,40 @@
+name: Build self-contained Linux package
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Artifact version
+        required: true
+        default: dev
+permissions:
+  contents: read
+jobs:
+  linux-amd64:
+    runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config patchelf \
+            libgvnc-1.0-dev libglib2.0-dev libssl-dev libkrb5-dev zlib1g-dev \
+            libjpeg-dev libpng-dev libicu-dev uuid-dev
+      - name: Build headless native adapters
+        run: |
+          scripts/build-freerdp.sh
+          PKG_CONFIG_PATH="$PWD/.cache/freerdp/lib/pkgconfig" make native
+      - name: Check and package
+        run: |
+          make test native-input-test
+          make release
+          python3 tests/package.py "dist/remote-computer-use-$VERSION-linux-amd64.tar.gz" --chroot
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-computer-use-linux-amd64
+          path: dist/*
+          if-no-files-found: error

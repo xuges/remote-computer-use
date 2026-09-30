@@ -9,7 +9,23 @@
 
 目前是首个可运行版本，本机支持 Linux，已验证 Ubuntu 22.04 x86_64。远端 macOS、Windows 和 Linux 的覆盖目标依赖各自 VNC / RDP 服务；自动化集成测试使用 TigerVNC 和 FreeRDP shadow。**已对配置中的 Linux VNC、Mac VNC、Windows RDP 完成连接、截图和键鼠实测，Mac emoji 丢失已修复。Mac 水平滚动，以及 Windows 双轴同时滚动仍有兼容性限制。** 详细架构与后续计划见 [设计文档](docs/design.md)，测试边界见 [验证记录](docs/validation.md)。
 
-## 构建
+## 快速安装
+
+自包含发行包适用于 **Linux x86_64、glibc 2.35+**。运行时无需安装 Go、FreeRDP、libgvnc 或显示组件，也不需要 root。解压包后执行：
+
+```sh
+./install.sh
+# 或同时安装 Agent Skill：./install.sh --agent codex
+export PATH="$HOME/.local/bin:$PATH"
+remote-computer-ctl doctor
+# 编辑 ~/.remote-computer-use/config.toml 中的真实连接信息
+```
+
+首次安装自动创建权限为 0600 的示例配置，已有配置始终保留。运行库通过 `go:embed` 内嵌在 ctl 中，首次自检或连接时自动释放到私有缓存。安装过程完全离线，不修改 shell 启动文件。也可直接运行包内 `bin/` 的两个 CLI。
+
+本机已可通过 `make release VERSION=dev` 生成 `dist/` 下的发行包与 SHA-256 校验文件，尚未发布在线下载地址。完整的校验、安装参数、缓存、升级和平台边界见 [安装文档](docs/installation.md)。
+
+## 从源码构建
 
 要求 Go 1.25.8 或更新版本、C 编译器、CMake、pkg-config、libgvnc ≥ 1.3、FreeRDP ≥ 3.25。Go 使用 `github.com/goexlib/cgo` 动态加载 C 适配库，两个 CLI 使用 `CGO_ENABLED=0` 构建。**Go 二进制仍需要相应协议的原生共享库。**
 
@@ -17,7 +33,7 @@ Ubuntu 22.04 示例：
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build pkg-config curl \
+sudo apt-get install -y build-essential cmake ninja-build pkg-config curl patchelf python3 \
   libgvnc-1.0-dev libglib2.0-dev libssl-dev libkrb5-dev zlib1g-dev \
   libjpeg-dev libpng-dev libicu-dev uuid-dev
 
@@ -30,7 +46,12 @@ make install
 export PATH="$HOME/.remote-computer-use/bin:$PATH"
 ```
 
-构建脚本校验下载归档的 SHA-256，不执行系统安装。`make install` 将两个 CLI 和已构建的适配库复制到 `~/.remote-computer-use/bin`，可通过 `PREFIX=/absolute/path` 更改；不会创建或覆盖连接配置。FreeRDP、libgvnc 等运行库仍须保留在原安装位置，当前没有可跨机器搬运的依赖打包发行物。
+构建脚本校验下载归档的 SHA-256，不执行系统安装。上述 `make install` 是开发版安装：将两个 CLI 和适配库复制到 `~/.remote-computer-use/bin`，可通过 `PREFIX=/absolute/path` 更改；不会创建或覆盖配置。开发版依赖原安装位置的 FreeRDP、libgvnc。要生成可搬运的内嵌运行库发行包，在两个无 X11 的适配库构建完成后执行：
+
+```sh
+make release VERSION=dev
+make package-test VERSION=dev
+```
 
 开发时可直接使用 `bin/`。仅构建一种协议：
 
@@ -39,7 +60,7 @@ make native NATIVE_FLAGS='-DRCU_BUILD_RDP=OFF -DRCU_BUILD_VNC=ON'
 # 或 -DRCU_BUILD_RDP=ON -DRCU_BUILD_VNC=OFF
 ```
 
-缺少某个协议库只影响该协议，连接时返回 `BACKEND_UNAVAILABLE`。适配库默认从 CLI 所在目录加载，也可通过绝对路径 `REMOTE_COMPUTER_LIB_DIR` 指定。
+开发版缺少某个协议库只影响该协议，连接时返回 `BACKEND_UNAVAILABLE`。开发版默认从 CLI 所在目录加载适配库；发行版默认自动释放内嵌库。两者均可通过绝对路径 `REMOTE_COMPUTER_LIB_DIR` 显式覆盖，使用 `remote-computer-ctl doctor --json` 检查。
 
 ## 配置
 

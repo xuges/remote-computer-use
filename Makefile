@@ -3,7 +3,7 @@ VERSION ?= dev
 NATIVE_FLAGS ?=
 PREFIX ?= $(HOME)/.remote-computer-use
 
-.PHONY: build test native native-input-test install integration-test integration-rdp-test clean
+.PHONY: build test native native-input-test install release package-test integration-test integration-rdp-test clean
 build:
 	mkdir -p bin
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '-X github.com/xuges/remote-computer-use/internal/app.Version=$(VERSION)' -o bin/remote-computer-ctl ./cmd/remote-computer-ctl
@@ -22,6 +22,13 @@ install:
 	install -d "$(DESTDIR)$(PREFIX)/bin"
 	install -m 755 bin/remote-computer-ctl bin/remote-computer-use "$(DESTDIR)$(PREFIX)/bin/"
 	install -m 755 bin/libremote-computer-*.so "$(DESTDIR)$(PREFIX)/bin/"
+
+# Requires both headless native adapters; the artifact contains its runtime.
+release:
+	GO="$(GO)" VERSION="$(VERSION)" scripts/release.sh
+
+package-test:
+	python3 tests/package.py "dist/remote-computer-use-$(VERSION)-linux-amd64.tar.gz"
 
 native-input-test:
 	mkdir -p build
