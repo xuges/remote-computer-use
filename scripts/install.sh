@@ -26,7 +26,12 @@ case $agent in
     claude-code) skill_dir=$HOME/.claude/skills/remote-computer-use;;
     *) usage >&2; exit 2;;
 esac
-[[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || { echo 'This package requires Linux x86_64 (glibc 2.35+).' >&2; exit 1; }
+case $(uname -s):$(uname -m) in
+    Linux:x86_64|Linux:aarch64|Darwin:arm64) ;;
+    *) echo 'Unsupported host platform.' >&2; exit 1;;
+esac
+sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
+replace_link() { if [[ $(uname -s) == Darwin ]]; then mv -fh "$1" "$2"; else mv -Tf -- "$1" "$2"; fi; }
 for name in remote-computer-ctl remote-computer-use; do
     [[ -x $release_dir/bin/$name ]] || { echo 'Run install.sh from an extracted release package.' >&2; exit 1; }
     target=$bin_dir/$name
@@ -41,7 +46,7 @@ fi
 REMOTE_COMPUTER_LIB_DIR= "$release_dir/bin/remote-computer-ctl" doctor
 version=$("$release_dir/bin/remote-computer-ctl" --version)
 [[ $("$release_dir/bin/remote-computer-use" --version) == "$version" ]] || { echo 'CLI versions differ.' >&2; exit 1; }
-identity=$(sha256sum "$release_dir/bin/remote-computer-ctl" "$release_dir/bin/remote-computer-use" | cut -d ' ' -f 1 | sha256sum | cut -d ' ' -f 1)
+identity=$(sha256 "$release_dir/bin/remote-computer-ctl" "$release_dir/bin/remote-computer-use" | cut -d ' ' -f 1 | sha256 | cut -d ' ' -f 1)
 mkdir -p -- "$prefix/releases" "$prefix/bin" "$bin_dir"
 stage=$(mktemp -d "$prefix/.install.XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
@@ -58,10 +63,10 @@ else
     cmp -s "$stage/bin/remote-computer-use" "$prefix/releases/$identity/bin/remote-computer-use"
 fi
 ln -s "releases/$identity" "$stage/current"
-mv -Tf -- "$stage/current" "$prefix/current"
+replace_link "$stage/current" "$prefix/current"
 for name in remote-computer-ctl remote-computer-use; do
     ln -s "../current/bin/$name" "$stage/$name"
-    mv -Tf -- "$stage/$name" "$prefix/bin/$name"
+    replace_link "$stage/$name" "$prefix/bin/$name"
     if [[ $bin_dir != "$prefix/bin" ]]; then
         ln -sfn -- "$prefix/bin/$name" "$bin_dir/$name"
     fi

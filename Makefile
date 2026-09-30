@@ -1,34 +1,42 @@
 GO ?= go
+EXE := $(if $(filter windows,$(shell $(GO) env GOOS)),.exe,)
 VERSION ?= dev
 NATIVE_FLAGS ?=
 PREFIX ?= $(HOME)/.remote-computer-use
+TARGET := $(shell $(GO) env GOOS)-$(shell $(GO) env GOARCH)
+LIB_EXT := $(if $(filter windows,$(shell $(GO) env GOOS)),dll,$(if $(filter darwin,$(shell $(GO) env GOOS)),dylib,so))
 
 .PHONY: build test native native-input-test install release package-test integration-test integration-rdp-test clean
 build:
 	mkdir -p bin
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '-X github.com/xuges/remote-computer-use/internal/app.Version=$(VERSION)' -o bin/remote-computer-ctl ./cmd/remote-computer-ctl
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '-X github.com/xuges/remote-computer-use/internal/app.Version=$(VERSION)' -o bin/remote-computer-use ./cmd/remote-computer-use
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '-X github.com/xuges/remote-computer-use/internal/app.Version=$(VERSION)' -o bin/remote-computer-ctl$(EXE) ./cmd/remote-computer-ctl
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags '-X github.com/xuges/remote-computer-use/internal/app.Version=$(VERSION)' -o bin/remote-computer-use$(EXE) ./cmd/remote-computer-use
 
 test:
 	$(GO) test -race ./...
 	$(GO) vet ./...
 
 native:
-	cmake -S native -B build/native -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(CURDIR)/bin $(NATIVE_FLAGS)
+	cmake -S native -B build/native -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$(CURDIR)/bin -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=$(CURDIR)/bin $(NATIVE_FLAGS)
 	cmake --build build/native --parallel 4
 
 # Native runtime dependencies must remain installed in their original prefix.
 install:
 	install -d "$(DESTDIR)$(PREFIX)/bin"
-	install -m 755 bin/remote-computer-ctl bin/remote-computer-use "$(DESTDIR)$(PREFIX)/bin/"
-	install -m 755 bin/libremote-computer-*.so "$(DESTDIR)$(PREFIX)/bin/"
+	install -m 755 bin/remote-computer-ctl$(EXE) bin/remote-computer-use$(EXE) "$(DESTDIR)$(PREFIX)/bin/"
+	install -m 755 bin/libremote-computer-*.$(LIB_EXT) "$(DESTDIR)$(PREFIX)/bin/"
 
 # Requires both headless native adapters; the artifact contains its runtime.
 release:
 	GO="$(GO)" VERSION="$(VERSION)" scripts/release.sh
 
 package-test:
-	python3 tests/package.py "dist/remote-computer-use-$(VERSION)-linux-amd64.tar.gz"
+ifeq ($(EXE),.exe)
+	$(GO) build -o build/portable.exe ./tests/portable
+	python3 tests/package-windows.py "dist/remote-computer-use-$(VERSION)-$(TARGET).zip" build/portable.exe
+else
+	python3 tests/package.py "dist/remote-computer-use-$(VERSION)-$(TARGET).tar.gz"
+endif
 
 native-input-test:
 	mkdir -p build

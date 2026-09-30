@@ -36,6 +36,7 @@ def main():
                 del env[key]
         env['HOME'] = str(home)
         env['XDG_CACHE_HOME'] = str(home / 'cache')
+        env['REMOTE_COMPUTER_CACHE_DIR'] = str(home / 'cache/remote-computer-use/native')
         env['XDG_CONFIG_HOME'] = str(home / 'config')
         ctl = package / 'bin/remote-computer-ctl'
         # All commands can be moved independently of the source tree or libraries.

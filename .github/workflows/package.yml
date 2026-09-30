@@ -1,4 +1,4 @@
-name: Build self-contained Linux package
+name: Build self-contained packages
 on:
   workflow_dispatch:
     inputs:
@@ -9,8 +9,45 @@ on:
 permissions:
   contents: read
 jobs:
-  linux-amd64:
-    runs-on: ubuntu-22.04
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:22.04
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y git ca-certificates curl build-essential cmake ninja-build pkg-config patchelf python3 \
+            libgvnc-1.0-dev libglib2.0-dev libssl-dev libkrb5-dev zlib1g-dev \
+            libjpeg-dev libpng-dev libicu-dev uuid-dev
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build and test
+        run: |
+          scripts/build-freerdp.sh
+          PKG_CONFIG_PATH="$PWD/.cache/freerdp/lib/pkgconfig" make native
+          make build test native-input-test
+          go run ./tests/portable
+          make release
+          python3 tests/package.py "dist/remote-computer-use-$VERSION-linux-${{ matrix.arch }}.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-computer-use-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+  macos:
+    runs-on: macos-15
     env:
       VERSION: ${{ inputs.version }}
     steps:
@@ -18,23 +55,60 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install build dependencies
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build and test
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config patchelf \
-            libgvnc-1.0-dev libglib2.0-dev libssl-dev libkrb5-dev zlib1g-dev \
-            libjpeg-dev libpng-dev libicu-dev uuid-dev
-      - name: Build headless native adapters
+          test "$(uname -m)" = arm64
+          brew install cmake ninja gtk-vnc openssl@3 pkgconf
+          scripts/build-freerdp.sh
+          PKG_CONFIG_PATH="$PWD/.cache/freerdp/lib/pkgconfig" make native
+          make build test native-input-test
+          go run ./tests/portable
+          make release
+          python3 tests/package.py "dist/remote-computer-use-$VERSION-darwin-arm64.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-computer-use-darwin-arm64
+          path: dist/*
+          if-no-files-found: error
+  windows:
+    runs-on: windows-2022
+    env:
+      VERSION: ${{ inputs.version }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          path-type: inherit
+          update: true
+          install: >-
+            make tar curl
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-gtk-vnc
+            mingw-w64-ucrt-x86_64-openssl
+      - name: Build and test
         run: |
           scripts/build-freerdp.sh
           PKG_CONFIG_PATH="$PWD/.cache/freerdp/lib/pkgconfig" make native
-      - name: Check and package
-        run: |
-          make test native-input-test
+          make build test
           make release
-          python3 tests/package.py "dist/remote-computer-use-$VERSION-linux-amd64.tar.gz" --chroot
+          go build -o build/portable.exe ./tests/portable
+          python3 tests/package-windows.py "dist/remote-computer-use-$VERSION-windows-amd64.zip" build/portable.exe
       - uses: actions/upload-artifact@v4
         with:
-          name: remote-computer-use-linux-amd64
+          name: remote-computer-use-windows-amd64
           path: dist/*
           if-no-files-found: error

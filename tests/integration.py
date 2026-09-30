@@ -266,7 +266,7 @@ certificate_sha256 = "{fingerprint}"
             call(USE, '--conn', 'test', 'click', '--x', '10', '--y', '10', ok=False)
             call(CTL, 'disconnect', '--all', '--json')
             call(CTL, 'disconnect', 'test', '--json')
-            assert not list((tmp / 'run').glob('*.sock'))
+            assert not list((tmp / 'run').glob('*.endpoint.json'))
             print('PASS: real VNC authentication, headless RGB screenshots, input events, incremental frames, resize/geometry guard, cancellation, batch failure, disconnect and redaction')
         finally:
             subprocess.run([str(CTL), 'disconnect', '--all', '--json'], env=env, capture_output=True, timeout=15)
