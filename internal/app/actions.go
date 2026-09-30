@@ -10,8 +10,95 @@ import (
 )
 
 type controller struct {
-	b    backend.Backend
-	x, y int
+	b            backend.Backend
+	x, y         int
+	buttons      int
+	keys         []core.Event
+	releaseAt    time.Time
+	heldGeometry uint64
+}
+
+// The worker owns this state under its action gate. A completed CLI process
+// must not release explicit holds, so the worker supplies a bounded idle lease.
+const inputIdleTimeout = 30 * time.Second
+
+func (c *controller) holding() bool { return c.buttons != 0 || len(c.keys) != 0 }
+
+func (c *controller) keyHeld(key core.Event) bool {
+	for _, v := range c.keys {
+		if v.A == key.A {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *controller) forgetKey(key core.Event) {
+	for j, v := range c.keys {
+		if v.A == key.A {
+			c.keys = append(c.keys[:j], c.keys[j+1:]...)
+			return
+		}
+	}
+}
+
+// Release bypasses cancellation and stale geometry guards. Retain failures so
+// the watchdog can retry; a failed send may already have reached the server.
+func (c *controller) releaseInput() (err error) {
+	c.releaseAt = time.Time{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if c.buttons != 0 {
+		if i, e := c.b.Info(); e == nil && i.Width > 0 && i.Height > 0 {
+			c.x = max(0, min(c.x, i.Width-1))
+			c.y = max(0, min(c.y, i.Height-1))
+		}
+		if e := c.b.Send(ctx, core.Event{Kind: core.Pointer, A: c.x, B: c.y}); e != nil {
+			err = e
+		} else {
+			c.buttons = 0
+		}
+	}
+	for j := len(c.keys) - 1; j >= 0; j-- {
+		v := c.keys[j]
+		v.C = 0
+		if e := c.b.Send(ctx, v); e != nil {
+			if err == nil {
+				err = e
+			}
+		} else {
+			c.forgetKey(v)
+		}
+	}
+	return err
+}
+
+func (c *controller) expireInput(now time.Time) error {
+	if !c.holding() {
+		return nil
+	}
+	i, e := c.b.Info()
+	if e != nil || i.State != "ready" || i.Geometry != c.heldGeometry || !now.Before(c.releaseAt) {
+		return c.releaseInput()
+	}
+	return nil
+}
+
+func (c *controller) perform(ctx context.Context, a core.Action) (err error) {
+	if a.Kind == "release-input" {
+		return c.releaseInput()
+	}
+	if e := c.expireInput(time.Now()); e != nil {
+		return e
+	}
+	defer func() {
+		if err != nil {
+			_ = c.releaseInput()
+		} else if c.holding() {
+			c.releaseAt = time.Now().Add(inputIdleTimeout)
+		}
+	}()
+	return c.execute(ctx, a)
 }
 
 func canceled(ctx context.Context) error {
@@ -31,7 +118,7 @@ func pause(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func (c *controller) perform(ctx context.Context, a core.Action) (err error) {
+func (c *controller) execute(ctx context.Context, a core.Action) (err error) {
 	i, e := c.b.Info()
 	if e != nil {
 		return e
@@ -43,6 +130,7 @@ func (c *controller) perform(ctx context.Context, a core.Action) (err error) {
 		return core.GeometryChanged
 	}
 	g := i.Geometry
+	c.heldGeometry = g
 	send := func(v core.Event) error {
 		if ctx.Err() != nil {
 			return canceled(ctx)
@@ -67,8 +155,19 @@ func (c *controller) perform(ctx context.Context, a core.Action) (err error) {
 		for j := len(held) - 1; j >= 0; j-- {
 			v := held[j]
 			v.C = 0
-			if e := c.b.Send(cleanup, v); e != nil && err == nil {
-				err = e
+			if v.Kind == core.Pointer {
+				v.C = c.buttons
+			}
+			if e := c.b.Send(cleanup, v); e != nil {
+				if v.Kind == core.Key && !c.keyHeld(v) {
+					c.keys = append(c.keys, v)
+				}
+				if v.Kind == core.Pointer {
+					c.buttons |= buttonMask(a.Button)
+				}
+				if err == nil {
+					err = e
+				}
 			}
 		}
 	}()
@@ -84,16 +183,31 @@ func (c *controller) perform(ctx context.Context, a core.Action) (err error) {
 	}
 	switch a.Kind {
 	case "move":
-		return move(a.X, a.Y, 0)
+		return move(a.X, a.Y, c.buttons)
+	case "pointer-down", "pointer-up":
+		mask := buttonMask(a.Button)
+		if mask == 0 {
+			return core.InvalidArgs
+		}
+		if a.Kind == "pointer-up" {
+			if c.buttons&mask == 0 {
+				return nil
+			}
+			if e := move(c.x, c.y, c.buttons&^mask); e != nil {
+				return e
+			}
+			c.buttons &^= mask
+			return nil
+		}
+		if !point(a.X, a.Y) {
+			return core.InvalidArgs
+		}
+		c.buttons |= mask // Track even an ambiguous failed down for cleanup.
+		c.x, c.y = a.X, a.Y
+		return move(a.X, a.Y, c.buttons)
 	case "click", "drag":
-		mask := 1
-		switch a.Button {
-		case "", "left":
-		case "middle":
-			mask = 2
-		case "right":
-			mask = 4
-		default:
+		mask := buttonMask(a.Button)
+		if mask == 0 || c.buttons != 0 {
 			return core.InvalidArgs
 		}
 		if !point(a.X, a.Y) {
@@ -152,16 +266,46 @@ func (c *controller) perform(ctx context.Context, a core.Action) (err error) {
 		}
 		return nil
 	case "scroll":
+		// VNC wheel events contain a complete button mask. Do not silently
+		// release a held button (the native wheel ABI has no mask argument).
+		if c.buttons != 0 {
+			return core.InvalidArgs
+		}
 		if a.DX < -100 || a.DX > 100 || a.DY < -100 || a.DY > 100 || (a.DX == 0 && a.DY == 0) {
 			return core.InvalidArgs
 		}
 		return send(core.Event{Kind: core.Wheel, A: a.DX, B: a.DY, C: c.x, D: c.y})
+	case "key-down", "key-up":
+		keys, e := parseChord(a.Chord)
+		if e != nil || len(keys) != 1 {
+			return core.InvalidArgs
+		}
+		v := keys[0]
+		if a.Kind == "key-up" {
+			if !c.keyHeld(v) {
+				return nil
+			}
+			if e := send(v); e != nil {
+				return e
+			}
+			c.forgetKey(v)
+			return nil
+		}
+		if c.keyHeld(v) {
+			return nil
+		}
+		c.keys = append(c.keys, v)
+		v.C = 1
+		return send(v)
 	case "key":
 		keys, e := parseChord(a.Chord)
 		if e != nil {
 			return e
 		}
 		for _, v := range keys {
+			if c.keyHeld(v) {
+				continue
+			}
 			held = append(held, v)
 			v.C = 1
 			if e := send(v); e != nil {
@@ -170,6 +314,9 @@ func (c *controller) perform(ctx context.Context, a core.Action) (err error) {
 		}
 		return nil
 	case "type":
+		if len(c.keys) != 0 {
+			return core.InvalidArgs
+		}
 		if a.Method != "" && a.Method != "keys" {
 			return core.Unsupported
 		}
@@ -208,6 +355,19 @@ func (c *controller) perform(ctx context.Context, a core.Action) (err error) {
 		return nil
 	default:
 		return core.InvalidArgs
+	}
+}
+
+func buttonMask(button string) int {
+	switch button {
+	case "", "left":
+		return 1
+	case "middle":
+		return 2
+	case "right":
+		return 4
+	default:
+		return 0
 	}
 }
 

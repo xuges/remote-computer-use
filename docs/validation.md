@@ -170,3 +170,14 @@ Windows `0.1.0` 安装测试本轮未再触发此前的 ASR 拦截；未修改 D
 首版许可核对发现 Windows 的系统 gdk-pixbuf 间接引入 TIFF/JBIG。改用固定版本 2.42.12、禁用全部图像加载器的最小 DLL 后，Windows 库数从 42 降至 32；最终包再次通过完整安装与 VNC 测试，清单确认不含 TIFF/JBIG。打包器新增拒绝 libjbig 的检查，项目采用 MIT，补齐 Go 依赖和标准 GNU 许可文本。
 
 四个平台共归集 69 项去重后的精确原生源码记录，包含 Ubuntu `.dsc` 及其校验过的源码/补丁、MSYS2 完整源码包，以及 Homebrew 原始源码、已安装配方、资源和补丁。Glib 配方的瓶装哈希、livecheck 和顶层注释差异不影响构建；源码构建部分匹配后按固定仓库 revision 取得文件补丁。源码收集索引中无失败项。对应源码包还包含项目源码、构建脚本和 Go 模块源码，须与二进制同处发布。
+
+### 跨命令保持输入（0.1.1-dev）
+
+2026-09-30，针对无法在 `drag` 中插入 Esc 的使用反馈，新增 pointer-down/up、key-down/up 和 release-input，复用原有 VNC/RDP 输入 ABI。
+
+- `make test`：race、vet 通过；覆盖跨命令状态、已有修饰键保留、多鼠标按钮、幂等释放、30 秒空闲期限、尺寸变化、取消、部分发送失败、释放重试及 watchdog 与操作串行化。
+- `make integration-rdp-test`：隔离 TigerVNC 和 FreeRDP shadow 真协议测试通过。桌面事件日志确认移动和 Esc 按下时 Button1 仍保持，Shift+拖动同时带有修饰键和按钮状态；截图不松开鼠标，显式释放和正常断开均收到 up。已有认证、证书、截图、输入、取消和尺寸变化测试通过。
+- `make release VERSION=0.1.1-dev` 与 `make package-test VERSION=0.1.1-dev`：Linux x64 内嵌依赖自检、离线安装、配置保留、Skill 安装与冲突检查通过。Skill frontmatter 校验通过。
+- Windows x64、Linux arm64、macOS arm64 的 Go CLI 交叉编译通过；本次未重新做这些本机平台或 Mac/Windows 远端的新输入实机验收，不将 Linux 回环结果等同于实机验证。
+
+本地开发包和 Codex/OpenCode Skill 已升级，原配置保留，原有 Linux/Mac 就绪连接重连以加载新 worker，Windows 保持未连接。尚未发布 GitHub Release；原有 0.1.0 发行归档不变。

@@ -33,13 +33,13 @@ int main(void) {
             XFlush(d);
         }
         if (e.type == MotionNotify)
-            printf("move %d %d\n", e.xmotion.x, e.xmotion.y);
+            printf("move %d %d state %u\n", e.xmotion.x, e.xmotion.y, e.xmotion.state);
         if (e.type == ButtonPress || e.type == ButtonRelease)
             printf("button %s %u %d %d\n", e.type == ButtonPress ? "down" : "up", e.xbutton.button,
                    e.xbutton.x, e.xbutton.y);
         if (e.type == KeyPress || e.type == KeyRelease) {
             KeySym sym = XLookupKeysym(&e.xkey, 0);
-            printf("key %s %lu\n", e.type == KeyPress ? "down" : "up", sym);
+            printf("key %s %lu state %u\n", e.type == KeyPress ? "down" : "up", sym, e.xkey.state);
             if (e.type == KeyPress) {
                 XSetForeground(d, gc, 0xffff00);
                 XFillRectangle(d, w, gc, 10, 10, 20, 20);

@@ -15,6 +15,12 @@ func TestActionRejectsUnrelatedFlagsBeforeConnecting(t *testing.T) {
 		{"screenshot", "--output", "ignored.png", "--button", "right"},
 		{"type", "--text", "hello", "--count", "2"},
 		{"key", "CTRL+A", "--duration", "1s"},
+		{"key-down", "CTRL+A"},
+		{"key-up", ""},
+		{"pointer-down", "--x", "10"},
+		{"pointer-up", "--x", "10", "--y", "20"},
+		{"pointer-down", "--x", "10", "--y", "20", "--button", "bad"},
+		{"release-input", "--button", "right"},
 	} {
 		r, w, err := os.Pipe()
 		if err != nil {

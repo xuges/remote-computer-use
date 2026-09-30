@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"path/filepath"
@@ -9,6 +10,25 @@ import (
 
 	"github.com/xuges/remote-computer-use/internal/core"
 )
+
+func TestInputWatchdogSerializesWithActions(t *testing.T) {
+	b := &fakeBackend{}
+	s := &server{gate: make(chan struct{}, 1), control: controller{b: b}}
+	if e := s.control.perform(context.Background(), core.Action{Kind: "pointer-down", X: 10, Y: 20}); e != nil {
+		t.Fatal(e)
+	}
+	due := s.control.releaseAt
+	s.gate <- struct{}{}
+	s.expireInput(due)
+	if !s.control.holding() {
+		t.Fatal("watchdog interrupted an active action")
+	}
+	<-s.gate
+	s.expireInput(due)
+	if s.control.holding() || len(b.events) != 2 || b.events[1].C != 0 {
+		t.Fatalf("watchdog failed to release: %+v", b.events)
+	}
+}
 
 func TestStopWaitsForBackendCleanup(t *testing.T) {
 	for _, missingSocket := range []bool{false, true} {

@@ -261,8 +261,24 @@ func (s *server) handle(w http.ResponseWriter, request *http.Request) {
 	if ctx.Err() != nil {
 		res = core.Result{Error: core.Code(canceled(ctx))}
 	}
+	if !res.OK {
+		_ = s.control.releaseInput()
+	}
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Second))
-	_ = json.NewEncoder(w).Encode(res)
+	if json.NewEncoder(w).Encode(res) != nil {
+		_ = s.control.releaseInput()
+	}
+}
+
+// Called by the worker, never concurrently with input actions. Status and
+// screenshots do not renew the lease. A busy action owns its own cleanup.
+func (s *server) expireInput(now time.Time) {
+	select {
+	case s.gate <- struct{}{}:
+		defer func() { <-s.gate }()
+		_ = s.control.expireInput(now)
+	default:
+	}
 }
 
 func Worker() int {
@@ -345,8 +361,21 @@ func Worker() int {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	<-ctx.Done()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+running:
+	for {
+		select {
+		case <-ctx.Done():
+			break running
+		case now := <-ticker.C:
+			s.expireInput(now)
+		}
+	}
 	shutdown()
+	s.gate <- struct{}{}
+	_ = s.control.releaseInput()
+	<-s.gate
 	i := core.Info{Name: start.Name, Protocol: start.Config.Protocol, State: "stopped"}
 	saveInfo(dir, i)
 	return 0

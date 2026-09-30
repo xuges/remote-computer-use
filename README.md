@@ -151,7 +151,22 @@ remote-computer-use --conn windows scroll --dx 3
 remote-computer-use --conn windows scroll --dy 3
 ```
 
-组合键如 `CTRL+SHIFT+S`、`ALT+F4`、`CMD+L`、`WIN+R`、`ENTER`、`TAB`。按顺序按下、逆序释放；拖拽或组合键中途取消会尽力释放本次按下的键和按钮。首期不公开跨命令持续按住的接口。
+组合键如 `CTRL+SHIFT+S`、`ALT+F4`、`CMD+L`、`WIN+R`、`ENTER`、`TAB`。按顺序按下、逆序释放；拖拽或组合键中途取消会尽力释放按下的键和按钮。
+
+开发版新增跨命令保持输入（`0.1.0` 包不包含此功能）。要验证“按住鼠标拖动时 Esc”，使用：
+
+```sh
+remote-computer-use --conn desktop pointer-down --x 100 --y 200 --button left
+remote-computer-use --conn desktop move --x 500 --y 300
+remote-computer-use --conn desktop key ESC
+remote-computer-use --conn desktop pointer-up --button left
+```
+
+`pointer-up` 在当前坐标释放指定按钮；`move` 保持已按下的按钮。`key-down SHIFT` / `key-up SHIFT` 可在多条操作之间保持修饰键，每条命令只接受一个键名，支持与 `key` 相同的键名和别名。`key` 只自动释放本次新按下的键，不松开之前显式保持的键。重复 down 不重复按键；`release-input` 释放该连接由本工具跟踪的所有键和按钮，可重复调用，不受旧尺寸版本限制。
+
+脚本应在 `finally` 或 shell `trap` 中调用 `release-input`，不要只依赖正常流程的 up。保持状态由同连接的调用者共享，多条命令组成的流程并不具备事务隔离。后台在 **30 秒无成功输入**、尺寸变化、操作失败、请求取消及正常断开时尽力释放；截图和查询不续期。CLI 参数校验失败没有发送请求，不会触发后台立即释放。进程被强制杀死或传输中断时无法保证释放送达。
+
+鼠标保持期间，完整 `click`、`drag` 和 `scroll` 返回 `INVALID_ARGUMENT`，防止隐式松开原有按钮；请使用 `move` 与显式 up。显式按键尚未释放时不允许 `type`。从 `0.1.0` 升级后须断开并重新连接，旧 worker 不会自动升级。
 
 文本采用协议键事件：RDP Unicode / VNC keysym，实际字符支持受远端服务器、输入法和应用影响。实测 Linux、Windows、Mac 均可输入中文和 emoji；识别到 Apple ARD 服务时，非 BMP 字符自动拆成 UTF-16 代理对发送，普通 VNC 保持完整码点。命令用法不变，无需修改远端输入法或剪贴板。首期只支持 `--method keys`，剪贴板方法返回 `UNSUPPORTED`，没有静默降级。敏感文本可从私有输入流传入 `--stdin`，避免放入命令行和终端历史。
 

@@ -47,7 +47,15 @@ remote-computer-use --conn windows type --stdin
 
 Apple ARD 服务会丢弃非 BMP 的完整码点 keysym。VNC 后端根据服务端提供的 ARD 认证类型识别兼容性路径，将这些字符编码为两个带 Unicode 标记的 UTF-16 代理单元，各自按下并释放。两个单元放在同一个原生队列事件内，避免取消请求在代理对中间截断；传输失败仍返回错误。普通 VNC 继续使用完整码点，不新增用户配置或剪贴板依赖。
 
-操作支持 --json、--timeout；坐标动作支持 --geometry-version，拒绝来自旧尺寸截图的操作。返回成功表示事件已发送，不等于远端应用操作成功，AI 应再次截图确认。首期不公开跨命令持续按住键或鼠标的接口，拖拽与组合键自动释放。
+操作支持 --json、--timeout；坐标动作支持 --geometry-version，拒绝来自旧尺寸截图的操作。返回成功表示事件已发送，不等于远端应用操作成功，AI 应再次截图确认。拖拽与组合键自动释放本次新按下的输入。
+
+### 跨命令保持输入
+
+针对拖动中插入 Esc 等操作，新增 `pointer-down --x X --y Y [--button left|middle|right]`、`pointer-up [--button ...]`、`key-down KEY`、`key-up KEY` 和 `release-input`。每个 key down/up 只接受一个键；组合修饰键可依次按下。`move` 使用当前按钮掩码，`key` 跳过已经显式保持的键，只逆序释放本次新按下的键。保持鼠标时拒绝完整 click/drag/scroll，保持键时拒绝 type，以免现有自动释放或 Unicode 路径破坏保持状态。
+
+状态由 worker 中的 controller 持有，通过既有 action gate 串行访问；原生 ABI 不变。多条 CLI 命令之间允许截图观察，但不提供调用者隔离或序列事务。成功输入更新 30 秒空闲期限，截图/status 不续期。worker 每 250ms 尝试获取空闲 gate，检查超时、连接状态和尺寸变化；正在执行的动作由自身取消清理负责。清理使用独立的 1 秒上下文，失败的释放保留在跟踪状态中供后续重试；release-input 绕过尺寸/取消检查。正常断开先停止请求并清理输入，再关闭后端。SIGKILL、服务端断开等情况下不承诺释放送达。
+
+后台操作失败清理整个连接的跟踪输入；命令行校验失败尚未到达后台，只能通过 finally/trap 中的 release-input 或空闲期限收尾。升级 CLI 后须重连已有会话以更新 worker。暂不增加 JSON 序列 DSL，先让单一低层操作可以跨命令组合。
 
 ## 配置与安全信息
 

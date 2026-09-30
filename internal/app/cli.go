@@ -217,7 +217,7 @@ func Use(args []string) int {
 		return 0
 	}
 	if len(args) == 0 || args[0] == "--help" {
-		fmt.Println("remote-computer-use --conn NAME screenshot --output PATH|-\nremote-computer-use --conn NAME move|click --x X --y Y [--button left|middle|right] [--count 1|2]\nremote-computer-use --conn NAME scroll --dx N --dy N\nremote-computer-use --conn NAME drag --from X,Y --to X,Y --duration 500ms\nremote-computer-use --conn NAME key CTRL+L\nremote-computer-use --conn NAME type --text TEXT|--stdin\nOptions: --json --timeout 10s --geometry-version N")
+		fmt.Println("remote-computer-use --conn NAME screenshot --output PATH|-\nremote-computer-use --conn NAME move|click --x X --y Y [--button left|middle|right] [--count 1|2]\nremote-computer-use --conn NAME scroll --dx N --dy N\nremote-computer-use --conn NAME drag --from X,Y --to X,Y --duration 500ms\nremote-computer-use --conn NAME pointer-down --x X --y Y [--button left|middle|right]\nremote-computer-use --conn NAME pointer-up [--button left|middle|right]\nremote-computer-use --conn NAME key CTRL+L\nremote-computer-use --conn NAME key-down|key-up SHIFT\nremote-computer-use --conn NAME release-input\nremote-computer-use --conn NAME type --text TEXT|--stdin\nOptions: --json --timeout 10s --geometry-version N\nExplicit holds persist across commands; released after 30s without successful input.")
 		return 0
 	}
 	// Both global and action flags are accepted on either side of the action name.
@@ -241,7 +241,7 @@ func Use(args []string) int {
 		}
 		if op == "" {
 			op = v
-		} else if op == "key" && chord == "" {
+		} else if (op == "key" || op == "key-down" || op == "key-up") && chord == "" {
 			chord = v
 		} else {
 			return failure(core.InvalidArgs, false)
@@ -271,7 +271,9 @@ func Use(args []string) int {
 	allowed := map[string]string{
 		"screenshot": " output ", "move": " x y ", "click": " x y button count ",
 		"scroll": " dx dy ", "drag": " from to duration ", "key": " ",
-		"type": " text stdin method ",
+		"type":         " text stdin method ",
+		"pointer-down": " x y button ", "pointer-up": " button ",
+		"key-down": " ", "key-up": " ", "release-input": " ",
 	}
 	valid := true
 	f.Visit(func(v *flag.Flag) {
@@ -288,7 +290,11 @@ func Use(args []string) int {
 		if *output == "" || (*output == "-" && *j) {
 			return failure(core.InvalidArgs, *j)
 		}
-	case "move", "click", "scroll":
+	case "move", "click", "scroll", "release-input":
+	case "pointer-down", "pointer-up":
+		if buttonMask(*button) == 0 || (op == "pointer-down" && (*x < 0 || *y < 0)) {
+			return failure(core.InvalidArgs, *j)
+		}
 	case "drag":
 		var e error
 		a.X, a.Y, e = coordinates(*from)
@@ -299,9 +305,10 @@ func Use(args []string) int {
 		if e != nil {
 			return failure(e, *j)
 		}
-	case "key":
-		if _, e := parseChord(chord); e != nil {
-			return failure(e, *j)
+	case "key", "key-down", "key-up":
+		keys, e := parseChord(chord)
+		if e != nil || (op != "key" && len(keys) != 1) {
+			return failure(core.InvalidArgs, *j)
 		}
 	case "type":
 		hasText := false

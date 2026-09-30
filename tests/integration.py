@@ -41,6 +41,40 @@ def main():
                 assert p.returncode != 0, args
             return p
 
+        def held_input_test(connection):
+            start = len((tmp / 'events').read_text())
+            def use(*args):
+                return call(USE, '--conn', connection, *args)
+            use('pointer-down', '--x', '150', '--y', '160')
+            use('move', '--x', '170', '--y', '180')
+            # Observation must not release a drag in progress.
+            use('screenshot', '--output', '-')
+            use('key', 'ESC')
+            use('pointer-up')
+            use('key-down', 'SHIFT')
+            use('pointer-down', '--x', '190', '--y', '200')
+            use('move', '--x', '210', '--y', '220')
+            use('key-up', 'SHIFT')
+            use('release-input')
+            time.sleep(.2)
+            log = (tmp / 'events').read_text()[start:]
+            assert 'move 170 180 state 256' in log, log
+            assert 'key down 65307 state 256' in log, log
+            assert log.index('button down 1 150 160') < log.index('key down 65307') < log.index('button up 1 170 180'), log
+            assert 'move 210 220 state 257' in log, log
+            assert 'key up 65505 state 257' in log, log
+            assert 'button up 1 210 220' in log, log
+            # Disconnect must release explicit holds before closing transport.
+            start = len((tmp / 'events').read_text())
+            use('key-down', 'CTRL')
+            use('pointer-down', '--x', '230', '--y', '240')
+            call(CTL, 'disconnect', connection, '--json')
+            time.sleep(.2)
+            log = (tmp / 'events').read_text()[start:]
+            assert 'button up 1 230 240' in log and 'key up 65507' in log, log
+            call(CTL, 'connect', connection, '--json')
+            print(f'PASS: {connection} holds across CLI processes, Esc during drag, Shift+drag, release-input and disconnect cleanup')
+
         try:
             port_socket = socket.socket()
             port_socket.bind(('127.0.0.1', 0))
@@ -113,6 +147,7 @@ password_env = "RCU_TEST_SECRET"
             assert 'button down 5' in text and 'button down 7' in text, text
             data = call(USE, '--conn', 'test', 'screenshot', '--output', '-').stdout
             assert Image.open(io.BytesIO(data)).convert('RGB').getpixel((15, 15)) == (255, 255, 0)
+            held_input_test('test')
             # Closing the requesting process must release a button already sent remotely.
             before = len((tmp / 'events').read_text())
             dragging = subprocess.Popen([str(USE), '--conn', 'test', 'drag', '--from', '50,60', '--to', '300,300', '--duration', '5s'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -231,6 +266,7 @@ password_env = "RCU_TEST_SECRET"
                 assert 'button down 5' not in wheel_events and 'button down 6' not in wheel_events, wheel_events
                 time.sleep(.2)
                 assert 'button down 1 222 111' in (tmp / 'events').read_text()
+                held_input_test('rdp')
                 call(CTL, 'disconnect', 'rdp', '--json')
                 rdp_server.terminate()
                 rdp_server.wait(timeout=5)
