@@ -11,6 +11,7 @@ typedef struct {
     VncConnection *conn;
     uint8_t *buffer;
     int tls;
+    int fallback_available, retry_plain, tried_plain;
 } vnc_state;
 static void quiet(const gchar *d, GLogLevelFlags l, const gchar *m, gpointer p) {
     (void)d;
@@ -33,17 +34,25 @@ static void auth_failure(VncConnection *c, const char *reason, gpointer p) {
 static void unsupported(VncConnection *c, guint type, gpointer p) {
     (void)c;
     (void)type;
-    rcu_fail(((vnc_state *)p)->s, RCU_UNSUPPORTED);
+    vnc_state *v = p;
+    if (v->tls && v->s->allow_plain && v->fallback_available && !v->tried_plain) {
+        v->retry_plain = 1;
+        vnc_connection_shutdown(c);
+    } else if (!v->retry_plain)
+        rcu_fail(v->s, RCU_UNSUPPORTED);
 }
 static void disconnected(VncConnection *c, gpointer p) {
     (void)c;
-    rcu_fail(((vnc_state *)p)->s, RCU_LOST);
+    vnc_state *v = p;
+    if (!v->retry_plain)
+        rcu_fail(v->s, RCU_LOST);
 }
 static void error_cb(VncConnection *c, const char *m, gpointer p) {
     (void)c;
     (void)m;
     vnc_state *v = p;
-    rcu_fail(v->s, v->tls ? RCU_TLS : RCU_CONNECT);
+    if (!v->retry_plain)
+        rcu_fail(v->s, v->tls ? RCU_TLS : RCU_CONNECT);
 }
 static int offered(GValueArray *a, int type) {
     for (guint i = 0; i < a->n_values; i++)
@@ -53,10 +62,23 @@ static int offered(GValueArray *a, int type) {
 }
 static void choose_auth(VncConnection *c, GValueArray *a, gpointer p) {
     vnc_state *v = p;
+    // RFB 3.3 servers can reject a connection with security type zero (for
+    // example, a temporary authentication blacklist). This is not a missing
+    // client authentication implementation.
+    if (offered(a, VNC_CONNECTION_AUTH_INVALID)) {
+        rcu_fail(v->s, RCU_CONNECT);
+        vnc_connection_shutdown(c);
+        return;
+    }
+    v->fallback_available = offered(a, VNC_CONNECTION_AUTH_ARD) ||
+                            offered(a, VNC_CONNECTION_AUTH_VNC) ||
+                            offered(a, VNC_CONNECTION_AUTH_NONE);
     int prefs[] = {VNC_CONNECTION_AUTH_VENCRYPT, VNC_CONNECTION_AUTH_TLS, VNC_CONNECTION_AUTH_ARD,
                    VNC_CONNECTION_AUTH_VNC, VNC_CONNECTION_AUTH_NONE};
     for (size_t i = 0; i < sizeof(prefs) / sizeof(prefs[0]); i++) {
         if (!offered(a, prefs[i]))
+            continue;
+        if (v->tried_plain && prefs[i] == VNC_CONNECTION_AUTH_VENCRYPT)
             continue;
         // Anonymous TLS lacks authenticated server identity; do not select it.
         if (prefs[i] == VNC_CONNECTION_AUTH_TLS)
@@ -80,7 +102,12 @@ static void choose_subtype(VncConnection *c, guint type, GValueArray *a, gpointe
             vnc_connection_set_auth_subtype(c, prefs[i]);
             return;
         }
-    rcu_fail(v->s, RCU_UNSUPPORTED);
+    // Retry a separately offered legacy authentication method only when it was
+    // explicitly enabled. Never retry after a certificate or password failure.
+    if (v->s->allow_plain && v->fallback_available && !v->tried_plain)
+        v->retry_plain = 1;
+    else
+        rcu_fail(v->s, RCU_UNSUPPORTED);
     vnc_connection_shutdown(c);
 }
 static void credential(VncConnection *c, GValueArray *a, gpointer p) {
@@ -195,6 +222,7 @@ void *backend_run(void *ptr) {
         rcu_fail(s, RCU_UNSUPPORTED);
         return NULL;
     }
+reconnect:
     v.conn = vnc_connection_new();
     if (!v.conn) {
         rcu_fail(s, RCU_CONNECT);
@@ -218,6 +246,8 @@ void *backend_run(void *ptr) {
     while (!rcu_stopping(s)) {
         while (g_main_context_pending(NULL))
             g_main_context_iteration(NULL, FALSE);
+        if (v.retry_plain)
+            break;
         uint64_t info[4];
         if (rcu_status(s, info) < 0)
             break;
@@ -233,6 +263,14 @@ void *backend_run(void *ptr) {
     }
     g_object_unref(v.conn);
     free(v.buffer);
+    if (v.retry_plain && !v.tried_plain && !rcu_stopping(s)) {
+        v.conn = NULL;
+        v.buffer = NULL;
+        v.retry_plain = 0;
+        v.tried_plain = 1;
+        v.tls = 0;
+        goto reconnect;
+    }
     return NULL;
 }
 void backend_interrupt(rcu *s) {

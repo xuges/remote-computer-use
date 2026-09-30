@@ -45,7 +45,7 @@ remote-computer-use --conn windows type --stdin
 
 PrivateConnectionConfig 与 PublicConnectionInfo 必须分离。公开输出只包括别名、协议、状态、尺寸、尺寸版本、帧序号、支持能力及安全错误码。不输出地址、端口、帐号、密码、令牌、证书材料、配置原文。凭据经私有启动管道传递，不放入子进程 argv。底层日志被拦截，不透传原始库错误，不提供显示秘密的调试开关。
 
-TLS 默认验证服务端证书；当前固定指纹功能仅用于 RDP，替代 CA / 主机名验证。VNC 选择 VeNCrypt X509，配置指纹暂返回 UNSUPPORTED。传统无 TLS VNC 需要显式 allow_unencrypted = true，不自动降级。认证成功不表示桌面已解锁。
+TLS 默认验证服务端证书；当前固定指纹功能仅用于 RDP，替代 CA / 主机名验证。VNC 选择 VeNCrypt X509，配置指纹暂返回 UNSUPPORTED。传统无 TLS VNC 需要显式 allow_unencrypted = true。若服务端同时提供传统认证，但 VeNCrypt 没有受支持的 X509 子类型，只在此开关开启后重连尝试一次传统认证；证书或密码失败不触发降级。服务端返回 RFB 3.3 安全类型 0 时按连接拒绝处理，避免把临时限流误报为协议不支持。认证成功不表示桌面已解锁。
 
 为兼容常见自签名 RDP 部署，支持显式 `tls_verify = false`：保持 TLS 加密和原有帐号认证，跳过服务端证书身份校验，不降级为 Standard RDP Security。省略时为 true；false 与 certificate_sha256 互斥，VNC 不接受此字段。该策略只属于私有配置，不加入公开状态或错误输出。原生 ABI 升级为版本 2，CLI 和适配库必须一起升级，旧库会被明确拒绝加载。
 

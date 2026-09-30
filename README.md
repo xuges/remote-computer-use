@@ -60,7 +60,7 @@ chmod 600 ~/.remote-computer-use/config.toml
 - RDP 使用 TLS / NLA，默认验证系统 CA 和主机名；可设置 `certificate_sha256` 固定证书。指纹须通过可信渠道取得，不自动接受未知证书。固定指纹替代 CA / 主机名验证。
 - 对于常见自签名 RDP 服务，可显式设置 `tls_verify = false` 跳过证书校验，仍使用 TLS 加密，但不验证服务端身份。它与 `certificate_sha256` 互斥，仅适用于 RDP；省略时默认为 `true`，不会在失败后自动跳过校验。
 - Windows 自签名证书的只读指纹获取步骤见 [Windows RDP 证书指纹](docs/windows-certificate.md)。
-- VNC 优先选择 VeNCrypt X509；传统 VNC/ARD/无认证连接须显式设置 `allow_unencrypted = true`。不自动选择匿名 TLS。目前 VNC 不支持 `certificate_sha256`，设置后返回 `UNSUPPORTED`。
+- VNC 优先选择 VeNCrypt X509；传统 VNC/ARD/无认证连接须显式设置 `allow_unencrypted = true`。同时提供传统认证但 VeNCrypt 不含受支持的 X509 子类型时，仅在该开关开启后重连尝试一次传统认证；证书或密码失败不触发降级。不自动选择匿名 TLS。目前 VNC 不支持 `certificate_sha256`，设置后返回 `UNSUPPORTED`。
 - 查询、错误和日志只输出别名、协议、状态、画面尺寸等公开字段，不输出主机、端口、帐号、密码或证书信息。配置和进程内存仍属于本机私有数据。
 
 ## 命令

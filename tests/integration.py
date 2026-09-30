@@ -51,7 +51,7 @@ def main():
             (tmp / 'passwd').write_bytes(passwd)
             (tmp / 'passwd').chmod(0o600)
             server_log = (tmp / 'server.log').open('wb')
-            server = subprocess.Popen(['Xtigervnc', f':{display}', '-rfbport', str(port), '-localhost', '-SecurityTypes', 'VncAuth', '-rfbauth', str(tmp / 'passwd'), '-geometry', '640x480', '-depth', '24', '-ac', '-nolisten', 'tcp'], stdout=server_log, stderr=server_log)
+            server = subprocess.Popen(['Xtigervnc', f':{display}', '-rfbport', str(port), '-localhost', '-SecurityTypes', 'TLSPlain,TLSVnc,VncAuth', '-rfbauth', str(tmp / 'passwd'), '-geometry', '640x480', '-depth', '24', '-ac', '-nolisten', 'tcp'], stdout=server_log, stderr=server_log)
             children.append(server)
             desktop_env = env | {'DISPLAY': f':{display}'}
             for _ in range(100):
@@ -77,9 +77,16 @@ host = "127.0.0.1"
 port = {port}
 password = "wrong-password"
 allow_unencrypted = true
+[connections.strict]
+protocol = "vnc"
+host = "127.0.0.1"
+port = {port}
+password_env = "RCU_TEST_SECRET"
 '''
             Path(env['REMOTE_COMPUTER_CONFIG']).write_text(config)
             Path(env['REMOTE_COMPUTER_CONFIG']).chmod(0o600)
+            strict = json.loads(call(CTL, 'connect', 'strict', '--json', ok=False).stdout)
+            assert strict['error'] == 'UNSUPPORTED', strict
             call(CTL, 'connect', 'test', '--json')
             call(CTL, 'connect', 'test', '--json')  # idempotence
             state = json.loads(call(CTL, 'status', 'test', '--json').stdout)
