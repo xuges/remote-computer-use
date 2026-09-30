@@ -11,7 +11,7 @@
 | Linux arm64 | ELF .so | tar.gz + install.sh | Ubuntu 22.04 ARM64，QEMU |
 | macOS arm64 | Mach-O .dylib | tar.gz + install.sh | macOS 15.7.7；当前依赖要求 macOS 15.0+ |
 
-macOS 最低版本由每个 dylib 的 `LC_BUILD_VERSION` / `LC_VERSION_MIN_MACOSX` 推导，记录在包内 `runtime-manifest.json`。当前 Homebrew 依赖需要 15.0，不能把最初规划的 14.0 当作已支持。macOS 库采用 ad-hoc 签名，尚未完成 Developer ID 签名、公证及真实下载隔离属性验收。
+macOS 最低版本由每个 dylib 的 `LC_BUILD_VERSION` / `LC_VERSION_MIN_MACOSX` 推导，记录在包内 `runtime-manifest.json`。当前 Homebrew 依赖需要 15.0，不能把最初规划的 14.0 当作已支持。macOS 库采用 ad-hoc 签名，当前终端安装与运行已通过；Developer ID 签名、公证不作为本阶段前置条件。浏览器下载隔离属性与 Gatekeeper 兼容性尚未验收，作为公开分发的独立事项，见 [安装说明](installation.md#windows-与-macos)。
 
 本机平台与被操作桌面的系统相互独立。每个目标都包含 VNC 与 RDP 后端；“后端可加载”“协议测试通过”“所有目标桌面组合实测”是不同层级，详细边界见 [验证记录](validation.md)。
 

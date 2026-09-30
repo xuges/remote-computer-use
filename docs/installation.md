@@ -2,7 +2,7 @@
 
 ## 使用自包含发行包
 
-开发包覆盖 Linux amd64/arm64（glibc 2.35+）、Windows amd64、macOS arm64（当前依赖要求 15.0+）。运行不需要 Go、编译器、FreeRDP、libgvnc、Python 或管理员权限。Linux ARM64 仅完成 QEMU 验证，Mac 包尚未完成 Developer ID 签名与公证；Alpine/musl 不支持。详细层级见 [跨平台验证](cross-platform.md)。
+开发包覆盖 Linux amd64/arm64（glibc 2.35+）、Windows amd64、macOS arm64（当前依赖要求 15.0+）。运行不需要 Go、编译器、FreeRDP、libgvnc、Python 或管理员权限。Linux ARM64 仅完成 QEMU 验证；Alpine/musl 不支持。详细层级见 [跨平台验证](cross-platform.md)。
 
 取得 `.tar.gz` 及同名 `.sha256` 文件后，在同一目录执行（将 `VERSION` 替换为实际版本）：
 
@@ -33,7 +33,9 @@ remote-computer-use --conn mac screenshot --output screen.png
 
 ## Windows 与 macOS
 
-macOS 使用对应的 `darwin-arm64.tar.gz`，校验命令为 `shasum -a 256 -c 包名.sha256`，安装参数与 Linux 相同。当前开发包使用 ad-hoc 签名，不能视为已完成公开分发的系统信任验收。
+macOS 使用对应的 `darwin-arm64.tar.gz`，校验命令为 `shasum -a 256 -c 包名.sha256`，安装参数与 Linux 相同。当前开发包使用 ad-hoc 签名，已通过本机构建、SSH 传输后在终端安装与运行的验证；Developer ID 签名与公证不作为本阶段前置条件。
+
+命令行工具并非一概豁免 Gatekeeper。浏览器下载附带隔离属性的文件，以及 Finder 启动等分发和启动方式，需要单独验证；当前尚未验收这些路径。Apple 对命令行工具的相关说明见 [Resolving Gatekeeper Problems](https://developer.apple.com/forums/thread/706379)。后续公开分发时再按实际安装方式评估 Developer ID 签名、公证与系统信任验收，不将它们混作当前 CLI 功能运行的必需条件。
 
 本轮 Windows 包在早先测试通过后，最终复测被 Defender ASR 高级勒索软件防护规则拦截，当前不能视为开箱即用发行版。安装器不更改安全策略；应由机器管理员审核签名/信誉与信任策略，详见 [验证记录](validation.md)。
 

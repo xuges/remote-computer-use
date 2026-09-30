@@ -25,7 +25,7 @@ remote-computer-ctl doctor
 
 本机已可通过 `make release VERSION=dev` 生成 `dist/` 下的发行包与 SHA-256 校验文件，尚未发布在线下载地址。完整的校验、安装参数、缓存、升级和平台边界见 [安装文档](docs/installation.md)。
 
-Windows 解压 `.zip` 后执行 `powershell -File .\install.ps1`，将安装器打印的 `bin` 目录加入 PATH。Linux/macOS 使用上述 `install.sh`。平台实现、构建要求及验收边界见 [跨平台设计](docs/cross-platform.md)。Mac 开发包尚未完成签名公证；Windows 最终复测触发 Defender ASR 拦截，当前仅交付开发验证包，详见 [验证记录](docs/validation.md)。
+Windows 解压 `.zip` 后执行 `powershell -File .\install.ps1`，将安装器打印的 `bin` 目录加入 PATH。Linux/macOS 使用上述 `install.sh`。平台实现、构建要求及验收边界见 [跨平台设计](docs/cross-platform.md)。Mac 已通过当前终端安装与运行验证，公证不作为本阶段前置条件；浏览器下载后的 Gatekeeper 兼容性另行验收。Windows 最终复测触发 Defender ASR 拦截，当前仅交付开发验证包，详见 [验证记录](docs/validation.md)。
 
 ## 从源码构建
 
