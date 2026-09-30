@@ -25,6 +25,8 @@ remote-computer-ctl doctor
 
 本机已可通过 `make release VERSION=dev` 生成 `dist/` 下的发行包与 SHA-256 校验文件，尚未发布在线下载地址。完整的校验、安装参数、缓存、升级和平台边界见 [安装文档](docs/installation.md)。
 
+Windows x64、Linux arm64、macOS arm64 的扩展方案见 [跨平台设计](docs/cross-platform.md)，当前尚未提供这些平台的可用发行包。
+
 ## 从源码构建
 
 要求 Go 1.25.8 或更新版本、C 编译器、CMake、pkg-config、libgvnc ≥ 1.3、FreeRDP ≥ 3.25。Go 使用 `github.com/goexlib/cgo` 动态加载 C 适配库，两个 CLI 使用 `CGO_ENABLED=0` 构建。**Go 二进制仍需要相应协议的原生共享库。**

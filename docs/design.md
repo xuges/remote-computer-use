@@ -83,6 +83,8 @@ connect --all 连接当前配置，最多并发 4 个，每项独立返回结果
 
 ## 当前进度
 
+下一阶段目标为 Windows x64、Linux x64/arm64、macOS arm64。平台层、IPC/权限、动态库分发、证书信任及分阶段验收方案见 [本机跨平台支持设计](cross-platform.md)。该文档记录规划与编译探测，不代表新增平台已经可运行。
+
 阶段 1–4 已实现并完成 Go 检查和真实 VNC/RDP 回环验证。阶段 5 已提供 Linux amd64 自包含发行包、离线安装器、自检、共用 Skill 和手动构建工作流；尚未在线发布，也未完成各 Agent 客户端联调。实际覆盖和未完成项见 [验证记录](validation.md)。
 
 已完成配置中的 Linux VNC、macOS 屏幕共享和 Windows RDP 实机基础矩阵，并修复 Mac 非 BMP 文本丢失。Windows 双轴滚动按两次单轴命令缓解，暂不优先修改协议实现。后续处理 ARD 水平滚动，覆盖 Linux xrdp、证书与会话策略互操作，然后再扩展本机平台、剪贴板和可选显示。维持两个公开 CLI 的职责边界，不引入与 remote-shell 重叠的任意 shell 执行接口。
