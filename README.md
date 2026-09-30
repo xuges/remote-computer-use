@@ -58,6 +58,7 @@ chmod 600 ~/.remote-computer-use/config.toml
 连接安全策略：
 
 - RDP 使用 TLS / NLA，默认验证系统 CA 和主机名；可设置 `certificate_sha256` 固定证书。指纹须通过可信渠道取得，不自动接受未知证书。固定指纹替代 CA / 主机名验证。
+- Windows 自签名证书的只读指纹获取步骤见 [Windows RDP 证书指纹](docs/windows-certificate.md)。
 - VNC 优先选择 VeNCrypt X509；传统 VNC/ARD/无认证连接须显式设置 `allow_unencrypted = true`。不自动选择匿名 TLS。目前 VNC 不支持 `certificate_sha256`，设置后返回 `UNSUPPORTED`。
 - 查询、错误和日志只输出别名、协议、状态、画面尺寸等公开字段，不输出主机、端口、帐号、密码或证书信息。配置和进程内存仍属于本机私有数据。
 
