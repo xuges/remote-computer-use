@@ -145,15 +145,24 @@ func stop(dir, name string) core.Result {
 	r := exchange(dir, name, core.Request{Operation: "disconnect", Timeout: 5 * time.Second})
 	if r.Error == core.NotConnected {
 		i := core.Info{Name: name, State: "stopped"}
-		saveInfo(dir, i)
-		return core.Result{OK: true, Info: &i}
+		r = core.Result{OK: true, Info: &i}
 	}
 	if !r.OK {
 		return r
 	}
 	for j := 0; j < 100; j++ {
 		if _, e := os.Lstat(socketPath(dir, name)); os.IsNotExist(e) {
-			return r
+			// The listener disappears before native backend cleanup finishes.
+			// Wait for the worker lock too, so an immediate connect can start.
+			lock, e := lockFile(filepath.Join(dir, name+".lock"))
+			if e == nil {
+				saveInfo(dir, *r.Info)
+				lock.Close()
+				return r
+			}
+			if e != core.NotReady {
+				return core.Result{Error: core.Code(e)}
+			}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
