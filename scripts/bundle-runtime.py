@@ -39,7 +39,7 @@ def system_library(name):
     return name.lower().startswith(('api-ms-', 'ext-ms-')) or (Path(os.environ['SYSTEMROOT']) / 'System32' / name).is_file()
 
 
-def dependencies(path):
+def dependencies(path, overrides=True):
     if OS == 'linux':
         output = run('ldd', str(path))  # Only our own trusted build outputs.
         if 'not found' in output:
@@ -70,7 +70,13 @@ def dependencies(path):
         for name in re.findall(r'DLL Name:\s*(\S+)', run('objdump', '-p', str(path))):
             if system_library(name):
                 continue
-            search = [path.parent, ROOT / '.cache/freerdp/bin'] + [Path(p) for p in os.get_exec_path()]
+            preferred = []
+            if overrides and name.lower() == 'libgdk_pixbuf-2.0-0.dll':
+                custom = ROOT / '.cache/gdk-pixbuf/bin'
+                if not (custom / name).is_file():
+                    raise RuntimeError('build the minimal gdk-pixbuf first: scripts/build-gdk-pixbuf.sh')
+                preferred = [custom]
+            search = preferred + [path.parent, ROOT / '.cache/freerdp/bin'] + [Path(p) for p in os.get_exec_path()]
             source = next((p / name for p in search if (p / name).is_file()), None)
             if source is None:
                 raise RuntimeError(f'unresolved dependency {name} in {path.name}')
@@ -92,6 +98,16 @@ def package_for(path):
 
 
 def license_package(source, notices):
+    if OS == 'windows' and source.parent == (ROOT / '.cache/gdk-pixbuf/bin').resolve():
+        shutil.copyfile(ROOT / '.cache/gdk-pixbuf-2.42.12/COPYING', notices / 'gdk-pixbuf-minimal-COPYING')
+        shutil.copyfile(ROOT / 'scripts/build-gdk-pixbuf.sh', notices / 'gdk-pixbuf-build.sh')
+        return 'gdk-pixbuf-minimal', {
+            'version': '2.42.12',
+            'source_url': 'https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz',
+            'source_sha256': 'b9505b3445b9a7e48ced34760c3bcb73e966df3ac94c95a148cb669ab748e3c7',
+            'license': 'LGPL-2.1-or-later',
+            'build_recipe': 'gdk-pixbuf-build.sh',
+        }
     if OS == 'linux':
         owner = package_for(source)
         fields = run('dpkg-query', '-W', '-f=${Version}\t${source:Package}\t${source:Version}', owner).split('\t')
@@ -104,6 +120,7 @@ def license_package(source, notices):
         prefix = Path(*parts[:index + 3])
         texts = [p for p in prefix.iterdir() if p.is_file() and re.match(r'(COPYING|LICENSE|LICENCE|NOTICE)', p.name, re.I)]
         formula = (prefix / '.brew' / (owner + '.rb')).read_text()
+        (notices / (owner + '-formula.rb')).write_text(formula)
         url = re.search(r'^  url "([^"]+)"', formula, re.M)
         digest = re.search(r'^  sha256 "([0-9a-f]{64})"', formula, re.M)
         if not texts and url and digest:
@@ -175,6 +192,8 @@ def build(args):
                 pending.append(dependency)
     if any(re.match(r'lib(X11|wayland|SDL|pulse|asound|gtk-)', n) for n in libraries):
         raise RuntimeError('runtime includes GUI/audio libraries; rebuild headless FreeRDP')
+    if any(n.lower().startswith('libjbig') for n in libraries):
+        raise RuntimeError('runtime includes GPL JBIG; rebuild gdk-pixbuf without TIFF loaders')
     args.output.mkdir(parents=True, exist_ok=True)
     args.notices.mkdir(parents=True, exist_ok=True)
     packages, inventory = {}, []
@@ -221,7 +240,7 @@ def build(args):
             raise RuntimeError(f'build requires glibc {minimum}; rebuild on Ubuntu 22.04')
         # Validate the relocated closure before embedding it.
         for path in tmp.iterdir():
-            for _, source in dependencies(path):
+            for _, source in dependencies(path, overrides=False):
                 if source.parent != tmp:
                     raise RuntimeError(f'{path.name} still loads dependencies outside the bundle')
         files, buf = [], io.BytesIO()
@@ -242,6 +261,8 @@ def build(args):
         (args.output / 'manifest.json').write_text(json.dumps(metadata, indent=2) + '\n')
     if OS == 'linux':
         shutil.copytree('/usr/share/common-licenses', args.notices / 'common-licenses', dirs_exist_ok=True)
+    else:
+        shutil.copytree(ROOT / 'scripts/licenses/common', args.notices / 'common-licenses', dirs_exist_ok=True)
     (args.notices / 'inventory.json').write_text(json.dumps({'packages': packages, 'libraries': inventory}, indent=2) + '\n')
     (args.notices / 'README.txt').write_text('Native libraries are dynamically loaded. License texts, package versions and source URLs\nare in this directory. FreeRDP uses the pinned 3.25.0 upstream release.\nOnly loader metadata/signatures are adjusted; library code is not modified.\nREMOTE_COMPUTER_LIB_DIR can select replacement compatible libraries.\n')
     print(f'Bundled {len(libraries)} libraries for {OS}/{ARCH}, {len(buf.getvalue()) / 1048576:.1f} MiB compressed')

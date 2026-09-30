@@ -1,6 +1,6 @@
 # 本机跨平台支持
 
-状态：已实现四个构建目标，2026-09-30。Linux x64、macOS arm64、Windows x64 使用现有机器验证；Linux arm64 使用 Ubuntu 22.04 ARM64 用户空间和 QEMU 验证，尚无 ARM Linux 实机验收。开发包未在线发布。Windows 在先前测试通过后，最终重建复测被本机 Defender ASR 拦截；当前不能宣称 Windows 包开箱即用，详见验证记录。
+状态：已实现四个构建目标，2026-09-30，首版 `0.1.0` 已准备本地产物。Linux x64、macOS arm64、Windows x64 使用现有机器验证；Linux arm64 使用 Ubuntu 22.04 ARM64 用户空间和 QEMU 验证，尚无 ARM Linux 实机验收。Windows 开发包曾被 Defender ASR 拦截；`0.1.0` 安装和 VNC 复测通过，仍保留其他机器或后续下载被拦截的风险提示，详见验证记录。
 
 ## 平台矩阵
 
@@ -59,7 +59,7 @@ go run ./tests/portable
 make release VERSION=dev
 ```
 
-Windows 在 MSYS2 UCRT64 shell 中安装 gcc、cmake、ninja、pkgconf、python、gtk-vnc、openssl 对应的 `mingw-w64-ucrt-x86_64-*` 包及 make/tar/curl，然后执行相同的 FreeRDP/native/build/release 步骤。构建脚本处理 MinGW 缺少 C11 `threads.h`、FreeRDP unwind 分支和 GCC 14+ 对旧源码指针类型诊断的变化；协议代码未因此改变。
+Windows 在 MSYS2 UCRT64 shell 中安装 gcc、cmake、ninja、meson、pkgconf、python、gtk-vnc、openssl 对应的 `mingw-w64-ucrt-x86_64-*` 包及 make/tar/curl，然后执行相同的 FreeRDP/native/build/release 步骤。打包阶段构建不带图像加载器的最小 gdk-pixbuf，避免系统包引入不需要的 TIFF/JBIG。构建脚本处理 MinGW 缺少 C11 `threads.h`、FreeRDP unwind 分支和 GCC 14+ 对旧源码指针类型诊断的变化；协议代码未因此改变。
 
 `tests/portable` 提供隔离的 RFB 桌面，使用真实 CLI 和原生 VNC 库检查 PNG 颜色、Unicode、键鼠、请求取消、重连、长路径及中文路径，不向用户真实桌面发送测试文字。Linux 的 TigerVNC / FreeRDP shadow 测试继续覆盖认证、证书、增量画面和尺寸变化。`tests/package.py` 与 `tests/package-windows.py` 分别验证安装、重装、缓存和自包含运行。
 

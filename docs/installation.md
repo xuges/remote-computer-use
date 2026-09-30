@@ -2,7 +2,7 @@
 
 ## 使用自包含发行包
 
-开发包覆盖 Linux amd64/arm64（glibc 2.35+）、Windows amd64、macOS arm64（当前依赖要求 15.0+）。运行不需要 Go、编译器、FreeRDP、libgvnc、Python 或管理员权限。Linux ARM64 仅完成 QEMU 验证；Alpine/musl 不支持。详细层级见 [跨平台验证](cross-platform.md)。
+首版 `0.1.0` 的自包含包覆盖 Linux amd64/arm64（glibc 2.35+）、Windows amd64、macOS arm64（当前依赖要求 15.0+）。运行不需要 Go、编译器、FreeRDP、libgvnc、Python 或管理员权限。Linux ARM64 仅完成 QEMU 验证；Alpine/musl 不支持。安装前请阅读 [README 中的 macOS 未公证与 Windows Defender 风险](../README.md#支持平台与已知风险)。详细层级见 [跨平台验证](cross-platform.md)。
 
 取得 `.tar.gz` 及同名 `.sha256` 文件后，在同一目录执行（将 `VERSION` 替换为实际版本）：
 
@@ -37,7 +37,7 @@ macOS 使用对应的 `darwin-arm64.tar.gz`，校验命令为 `shasum -a 256 -c 
 
 命令行工具并非一概豁免 Gatekeeper。浏览器下载附带隔离属性的文件，以及 Finder 启动等分发和启动方式，需要单独验证；当前尚未验收这些路径。Apple 对命令行工具的相关说明见 [Resolving Gatekeeper Problems](https://developer.apple.com/forums/thread/706379)。后续公开分发时再按实际安装方式评估 Developer ID 签名、公证与系统信任验收，不将它们混作当前 CLI 功能运行的必需条件。
 
-本轮 Windows 包在早先测试通过后，最终复测被 Defender ASR 高级勒索软件防护规则拦截，当前不能视为开箱即用发行版。安装器不更改安全策略；应由机器管理员审核签名/信誉与信任策略，详见 [验证记录](validation.md)。
+此前 Windows 开发包曾被 Defender ASR 高级勒索软件防护规则拦截；`0.1.0` 本轮安装、重装与 VNC 测试通过，但 EXE 仍未签名，不保证其他机器或后续下载不会被拦截。安装器不更改安全策略；发生拦截时根据防护历史记录核对文件和规则，详见 [验证记录](validation.md)。
 
 Windows 开发包使用 `windows-amd64.zip`，通过 `Get-FileHash -Algorithm SHA256 包名.zip` 对照 `.sha256`，解压后执行：
 
@@ -92,4 +92,4 @@ python3 tests/package.py dist/remote-computer-use-dev-linux-amd64.tar.gz --chroo
 
 发行包包含第三方版权与许可文本、库清单、Ubuntu、Homebrew 或 MSYS2 包版本和源码获取位置。构建器会对不明来源库停止打包。Mac 缺失许可文本时只在构建阶段下载并校验对应源码；最终安装包仍完全离线。固定 FreeRDP 版本由 `scripts/build-freerdp.sh` 校验来源归档；本机系统依赖的补丁版本记入发行包清单，发行包会随重建更新。
 
-当前产物在本机 `dist/` 生成，尚未发布下载地址。GitHub 手动构建工作流会上传可下载的构建产物，不自动创建或发布 Release。
+当前首版产物在本机 `dist/` 准备，公开下载以 [GitHub Releases](https://github.com/xuges/remote-computer-use/releases) 页面实际资产为准。GitHub 手动构建工作流会上传可下载的构建产物，不自动创建或发布 Release。发布版本、校验与草稿流程见 [发布指南](releasing.md)。

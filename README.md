@@ -7,13 +7,37 @@
 
 与 [remote-shell](https://github.com/xuges/remote-shell) 独立互补：remote-shell 处理远程命令和文件，本项目处理 GUI。远端只需提供 VNC / RDP 服务，无需安装本项目的执行助手。本机不打开窗口，不依赖 DISPLAY、Wayland、Xvfb 或外部键鼠工具；截图来自协议解码后的内存画面。
 
-本机实现支持 Windows x64、Linux x64/arm64、macOS arm64。Linux x64、Windows x64、Mac arm64 已使用现有机器验证；Linux arm64 已完成 QEMU 验证，尚待实机验收。远端 macOS、Windows 和 Linux 的覆盖目标依赖各自 VNC / RDP 服务；自动化集成测试使用 TigerVNC 和 FreeRDP shadow。**已对配置中的 Linux VNC、Mac VNC、Windows RDP 完成连接、截图和键鼠实测，Mac emoji 丢失已修复。Mac 水平滚动，以及 Windows 双轴同时滚动仍有兼容性限制。** 详细架构与后续计划见 [设计文档](docs/design.md)，测试边界见 [验证记录](docs/validation.md)。
+首版 **v0.1.0** 提供统一命令、后台连接、内嵌协议运行库及 Agent Skill。版本处于早期阶段，详细功能与限制见 [首版发布说明](docs/releases/v0.1.0.md)。
+
+项目自身代码采用 [MIT License](LICENSE)。自包含包中的第三方库保留各自许可；发布时同时提供对应源码包，详见 [第三方许可与源码说明](THIRD_PARTY.md)。
+
+## 支持平台与已知风险
+
+以下是运行命令行工具的**本机平台**；被操作的远端需启用兼容的 VNC / RDP 服务。
+
+| 本机平台 | 最低要求 / 验证范围 | 发行包后缀 |
+| --- | --- | --- |
+| Linux x64 | glibc 2.35+，已实机验证 | `linux-amd64.tar.gz` |
+| Linux arm64 | glibc 2.35+，仅完成 QEMU 验证，尚待实机验收 | `linux-arm64.tar.gz` |
+| macOS arm64 | macOS 15.0+，已在 15.7.7 验证 | `darwin-arm64.tar.gz` |
+| Windows x64 | 已在 Windows 10 22H2 验证 | `windows-amd64.zip` |
+
+> **macOS 未公证：** 当前包仅采用 ad-hoc 签名，未完成 Developer ID 签名与 Apple 公证。本机构建、SSH 传输后在终端安装运行已通过，但浏览器下载附带隔离属性的文件可能被 Gatekeeper 阻止，相关下载安装路径尚未验收。公证不作为当前 CLI 功能运行的前置条件；安装器不会自动移除隔离标记或关闭系统防护。
+>
+> **Windows 可能被 Defender 拦截：** 当前 EXE 未签名，此前开发包新解压后曾触发 Defender ASR，表现为启动时“拒绝访问”，甚至 `--version` 也无法执行。`0.1.0` 本轮安装和 VNC 截图、键鼠测试已通过，但不能保证其他机器或后续下载不再被拦截。请根据防护历史记录核对文件及拦截规则；安装器不会修改 Defender 策略。现有证据不支持将拦截归因于内嵌 DLL，详见 [Windows 拦截分析](docs/windows-asr.md)。
+
+远端 Linux VNC、Mac VNC/ARD、Windows RDP 已完成连接、截图和键鼠实测。Apple ARD 水平滚动暂不支持；Windows 双轴滚动请分成两条命令。Windows 本机回连自身 RDP 的认证问题仍待解决，不能由其他 RDP 场景通过推断该场景可用。更多测试范围见 [验证记录](docs/validation.md)，总体架构见 [设计文档](docs/design.md)。
 
 ## 快速安装
 
-自包含开发包覆盖 **Linux x64/arm64（glibc 2.35+）、Windows x64、macOS arm64（当前依赖要求 15.0+）**。运行时无需安装 Go、FreeRDP、libgvnc 或显示组件，也不需要 root。解压包后执行：
+从 [GitHub Releases](https://github.com/xuges/remote-computer-use/releases) 选择对应平台的 `remote-computer-use-0.1.0-<平台>` 包及同名 `.sha256` 文件。首版发布准备期间，以 Releases 页面实际列出的资产为准。自包含包运行时无需安装 Go、FreeRDP、libgvnc 或显示组件，也不需要管理员权限。
+
+Linux x64 示例（macOS 使用 `shasum -a 256 -c` 校验并选择 `darwin-arm64` 包）：
 
 ```sh
+sha256sum -c remote-computer-use-0.1.0-linux-amd64.tar.gz.sha256
+tar -xzf remote-computer-use-0.1.0-linux-amd64.tar.gz
+cd remote-computer-use-0.1.0-linux-amd64
 ./install.sh
 # 或同时安装 Agent Skill：./install.sh --agent codex
 export PATH="$HOME/.local/bin:$PATH"
@@ -23,9 +47,14 @@ remote-computer-ctl doctor
 
 首次安装自动创建私有示例配置（Unix 0600，Windows DACL），已有配置始终保留。运行库通过 `go:embed` 内嵌在 ctl 中，首次自检或连接时自动释放到私有缓存。安装过程完全离线，不修改 shell 启动文件。也可直接运行包内 `bin/` 的两个 CLI。
 
-本机已可通过 `make release VERSION=dev` 生成 `dist/` 下的发行包与 SHA-256 校验文件，尚未发布在线下载地址。完整的校验、安装参数、缓存、升级和平台边界见 [安装文档](docs/installation.md)。
+Windows 用 `Get-FileHash -Algorithm SHA256` 对照 `.sha256` 文件，解压 `.zip` 后执行：
 
-Windows 解压 `.zip` 后执行 `powershell -File .\install.ps1`，将安装器打印的 `bin` 目录加入 PATH。Linux/macOS 使用上述 `install.sh`。平台实现、构建要求及验收边界见 [跨平台设计](docs/cross-platform.md)。Mac 已通过当前终端安装与运行验证，公证不作为本阶段前置条件；浏览器下载后的 Gatekeeper 兼容性另行验收。Windows 最终复测触发 Defender ASR 拦截，当前仅交付开发验证包，详见 [验证记录](docs/validation.md)。
+```powershell
+powershell -File .\install.ps1
+# 或同时安装 Skill：powershell -File .\install.ps1 -Agent codex
+```
+
+将安装器打印的 `bin` 目录加入 PATH，再执行 `remote-computer-ctl doctor`。完整校验、安装参数、缓存和升级步骤见 [安装文档](docs/installation.md)，构建与发布步骤见 [发布指南](docs/releasing.md)。
 
 ## 从源码构建
 

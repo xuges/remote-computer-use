@@ -9,12 +9,14 @@ case $(uname -m) in x86_64|amd64) target_arch=amd64;; arm64|aarch64) target_arch
 exe=
 [[ $target_os != windows ]] || exe=.exe
 mkdir -p build dist
+if [[ $target_os == windows ]]; then bash scripts/build-gdk-pixbuf.sh; fi
 stage=$(mktemp -d "$root/build/release.XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 name=remote-computer-use-${version}-${target_os}-${target_arch}
 package=$stage/$name
 mkdir -p "$package/bin" "$package/skills"
 python3 scripts/bundle-runtime.py --notices "$package/THIRD_PARTY_NOTICES"
+GO="${GO:-go}" python3 scripts/go-notices.py "$package/THIRD_PARTY_NOTICES/go"
 for command in remote-computer-ctl remote-computer-use; do
     CGO_ENABLED=0 GOOS=$target_os GOARCH=$target_arch "${GO:-go}" build -tags embedded -trimpath \
         -ldflags "-s -w -X github.com/xuges/remote-computer-use/internal/app.Version=$version" \
@@ -26,6 +28,9 @@ cache=$stage/cache
 REMOTE_COMPUTER_LIB_DIR= REMOTE_COMPUTER_CACHE_DIR="$cache" "$package/bin/remote-computer-ctl$exe" doctor
 cp scripts/install.sh scripts/install.ps1 "$package/"
 cp config.example.toml README.md "$package/"
+cp CHANGELOG.md "$package/"
+cp THIRD_PARTY.md "$package/"
+if [[ -f LICENSE ]]; then cp LICENSE "$package/"; fi
 cp internal/runtimebundle/payload/manifest.json "$package/runtime-manifest.json"
 cp -R docs "$package/docs"
 cp -R skills/remote-computer-use "$package/skills/"
