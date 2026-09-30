@@ -7,11 +7,11 @@
 
 与 [remote-shell](https://github.com/xuges/remote-shell) 独立互补：remote-shell 处理远程命令和文件，本项目处理 GUI。远端只需提供 VNC / RDP 服务，无需安装本项目的执行助手。本机不打开窗口，不依赖 DISPLAY、Wayland、Xvfb 或外部键鼠工具；截图来自协议解码后的内存画面。
 
-目前是首个可运行版本，本机支持 Linux，已验证 Ubuntu 22.04 x86_64。远端 macOS、Windows 和 Linux 的覆盖目标依赖各自 VNC / RDP 服务；自动化集成测试使用 TigerVNC 和 FreeRDP shadow。**已对配置中的 Linux VNC、Mac VNC、Windows RDP 完成连接、截图和键鼠实测，Mac emoji 丢失已修复。Mac 水平滚动，以及 Windows 双轴同时滚动仍有兼容性限制。** 详细架构与后续计划见 [设计文档](docs/design.md)，测试边界见 [验证记录](docs/validation.md)。
+本机实现支持 Windows x64、Linux x64/arm64、macOS arm64。Linux x64、Windows x64、Mac arm64 已使用现有机器验证；Linux arm64 已完成 QEMU 验证，尚待实机验收。远端 macOS、Windows 和 Linux 的覆盖目标依赖各自 VNC / RDP 服务；自动化集成测试使用 TigerVNC 和 FreeRDP shadow。**已对配置中的 Linux VNC、Mac VNC、Windows RDP 完成连接、截图和键鼠实测，Mac emoji 丢失已修复。Mac 水平滚动，以及 Windows 双轴同时滚动仍有兼容性限制。** 详细架构与后续计划见 [设计文档](docs/design.md)，测试边界见 [验证记录](docs/validation.md)。
 
 ## 快速安装
 
-自包含发行包适用于 **Linux x86_64、glibc 2.35+**。运行时无需安装 Go、FreeRDP、libgvnc 或显示组件，也不需要 root。解压包后执行：
+自包含开发包覆盖 **Linux x64/arm64（glibc 2.35+）、Windows x64、macOS arm64（当前依赖要求 15.0+）**。运行时无需安装 Go、FreeRDP、libgvnc 或显示组件，也不需要 root。解压包后执行：
 
 ```sh
 ./install.sh
@@ -21,11 +21,11 @@ remote-computer-ctl doctor
 # 编辑 ~/.remote-computer-use/config.toml 中的真实连接信息
 ```
 
-首次安装自动创建权限为 0600 的示例配置，已有配置始终保留。运行库通过 `go:embed` 内嵌在 ctl 中，首次自检或连接时自动释放到私有缓存。安装过程完全离线，不修改 shell 启动文件。也可直接运行包内 `bin/` 的两个 CLI。
+首次安装自动创建私有示例配置（Unix 0600，Windows DACL），已有配置始终保留。运行库通过 `go:embed` 内嵌在 ctl 中，首次自检或连接时自动释放到私有缓存。安装过程完全离线，不修改 shell 启动文件。也可直接运行包内 `bin/` 的两个 CLI。
 
 本机已可通过 `make release VERSION=dev` 生成 `dist/` 下的发行包与 SHA-256 校验文件，尚未发布在线下载地址。完整的校验、安装参数、缓存、升级和平台边界见 [安装文档](docs/installation.md)。
 
-Windows x64、Linux arm64、macOS arm64 的扩展方案见 [跨平台设计](docs/cross-platform.md)，当前尚未提供这些平台的可用发行包。
+Windows 解压 `.zip` 后执行 `powershell -File .\install.ps1`，将安装器打印的 `bin` 目录加入 PATH。Linux/macOS 使用上述 `install.sh`。平台实现、构建要求及验收边界见 [跨平台设计](docs/cross-platform.md)。Mac 开发包尚未完成签名公证。
 
 ## 从源码构建
 
@@ -149,7 +149,7 @@ remote-computer-use --conn windows scroll --dy 3
 | `CONNECTION_LOST` / `TIMEOUT` / `CANCELED` | 检查连接和当前画面后再决定是否继续 |
 | `LOCAL_IO_FAILED` / `OPERATION_FAILED` | 本地文件或内部操作失败 |
 
-运行目录为 `$XDG_RUNTIME_DIR/remote-computer-use`，未配置时使用 `/tmp/remote-computer-use-UID`，权限 0700。`REMOTE_COMPUTER_RUN_DIR` 可指定隔离目录；所有 CLI 必须使用同一目录。Unix socket 路径长度有限，自定义运行目录最多 58 字节。
+运行目录为 `$XDG_RUNTIME_DIR/remote-computer-use`，未配置时使用 `/tmp/remote-computer-use-UID`，权限 0700。`REMOTE_COMPUTER_RUN_DIR` 可指定隔离目录；所有 CLI 必须使用同一目录。Windows 默认使用 `%LOCALAPPDATA%/remote-computer-use/run`，通过 DACL 保护。CLI 与 worker 使用带随机令牌的本机 HTTP，运行目录不再受 socket 路径长度限制；见 [HTTP 接口与转发规划](docs/http-ipc.md)。
 
 ## AI Agent Skill
 

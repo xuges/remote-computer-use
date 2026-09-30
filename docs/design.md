@@ -4,23 +4,23 @@
 
 提供两个 Go CLI：`remote-computer-ctl` 管理连接，`remote-computer-use` 提供统一截图和键鼠操作。使用 VNC/RDP 解码到内存并直接发送输入，不需要显示窗口、Xvfb、SSH 或远端执行助手。与 `remote-shell` 独立互补：本项目操作 GUI，remote-shell 执行远端命令和传输文件。
 
-首期本机支持 Linux。远端需要已启用 VNC/RDP 服务。静默指本机无窗口，远端用户仍可能看到鼠标、输入和应用变化。服务端支持独立会话时使用独立会话，否则使用现有桌面；本工具不能阻止远端物理键鼠输入。
+本机实现覆盖 Linux amd64/arm64、macOS arm64、Windows amd64；具体测试层级见跨平台文档。远端需要已启用 VNC/RDP 服务。静默指本机无窗口，远端用户仍可能看到鼠标、输入和应用变化。服务端支持独立会话时使用独立会话，否则使用现有桌面；本工具不能阻止远端物理键鼠输入。
 
 ## 架构
 
-每个连接使用一个后台进程，复用 ctl 二进制的内部运行模式。CLI 通过当前用户私有 Unix socket 请求操作。同一连接内输入动作串行，不同连接并行。协议事件循环持续解码，截图读取一致的完整内存快照，由 Go 编码 PNG。
+每个连接使用一个后台进程，复用 ctl 二进制的内部运行模式。CLI 通过带独立令牌的 loopback HTTP 请求操作，详见 [本机 HTTP 接口](http-ipc.md)。同一连接内输入动作串行，不同连接并行。协议事件循环持续解码，截图读取一致的完整内存快照，由 Go 编码 PNG。
 
 Go 使用 github.com/goexlib/cgo 动态加载小型 C 适配库，Go 二进制使用 CGO_ENABLED=0 构建。VNC 采用 libgvnc 核心，RDP 采用 FreeRDP 3 软件解码。C 适配层封装结构体、线程、回调和内存所有权，原生回调不进入 Go。库通过版本化 ABI 提供连接状态、画面快照和输入；不依赖 X11 客户端或显示服务。
 
 ## 发行与安装
 
-发行版使用 `embedded` build tag，通过 `go:embed` 将适配库及非 glibc 的传递依赖压缩归档编入 ctl；use 不调用后端，链接时不包含这份资源。构建时逐库设置 `$ORIGIN` RUNPATH 并验证依赖闭包，使其不再指向开发机器。glibc/加载器由宿主系统提供；首批基线为 Linux amd64、glibc 2.35，不承诺 musl 或其他本机平台可用。
+发行版使用 `embedded` build tag，通过 `go:embed` 将适配库及非系统的传递依赖压缩归档编入 ctl；use 不调用后端，链接时不包含这份资源。构建时按 ELF、Mach-O、PE 分别重定位并验证依赖闭包，使其不再指向开发机器。系统库与加载器由宿主提供；Linux 基线为 glibc 2.35，macOS 当前依赖要求 15.0，Windows 使用 UCRT64 DLL。
 
 首次使用在当前用户私有缓存中释放，按资源清单哈希隔离版本，逐文件校验 SHA-256，拒绝路径穿越、符号链接和不安全权限，通过临时目录原子发布处理并发启动。运行期间不下载依赖，不删除旧缓存。显式 `REMOTE_COMPUTER_LIB_DIR` 优先，保留开发和替换动态库的能力。
 
 离线安装器先自检运行库，再安装程序与可选 Skill，生成不含真实凭据的示例配置且不覆盖已有配置。`doctor` 独立于配置和远端连接，检查库加载及 ABI；不暴露底层错误原文。升级保留旧版本与活动 worker，重连后生效。发行包附第三方许可和来源清单。实现与排障详见 [安装文档](installation.md)。
 
-验证分三层：缓存与并发单元测试；安装、配置保留、冲突和只有 glibc 的隔离根目录测试；使用发行版 CLI 完成真实 VNC/RDP 回环测试。后续再扩展构建平台和线上发布。
+验证分三层：缓存与并发单元测试；安装、配置保留、冲突和只有 glibc 的隔离根目录测试；使用发行版 CLI 完成真实 VNC/RDP 回环测试。四个平台的测试层级分别记录，后续补齐原生 ARM Linux 与公开分发验收。
 
 ## 公共接口
 
@@ -63,7 +63,7 @@ TLS 默认验证服务端证书；当前固定指纹功能仅用于 RDP，替代
 
 ## 生命周期
 
-状态为 stopped、connecting、ready、disconnecting、failed。connect 等待认证和首个完整画面，默认 30 秒。重复 connect 健康连接、disconnect 已停止连接是幂等操作。disconnect 等待 socket 移除和 worker 生命周期锁释放，确保原生后端清理完成后才允许紧接着重连。配置变更在重新连接时生效。
+状态为 stopped、connecting、ready、disconnecting、failed。connect 等待认证和首个完整画面，默认 30 秒。重复 connect 健康连接、disconnect 已停止连接是幂等操作。disconnect 等待 worker 生命周期锁释放，确保原生后端清理完成后才允许紧接着重连。配置变更在重新连接时生效。
 
 connect --all 连接当前配置，最多并发 4 个，每项独立返回结果，部分失败不回滚成功连接。disconnect --all 清理当前用户运行的所有连接，包括已从配置删除的连接。任一失败整体退出非零。
 
@@ -83,8 +83,8 @@ connect --all 连接当前配置，最多并发 4 个，每项独立返回结果
 
 ## 当前进度
 
-下一阶段目标为 Windows x64、Linux x64/arm64、macOS arm64。平台层、IPC/权限、动态库分发、证书信任及分阶段验收方案见 [本机跨平台支持设计](cross-platform.md)。该文档记录规划与编译探测，不代表新增平台已经可运行。
+Windows x64、Linux x64/arm64、macOS arm64 的平台层、HTTP/权限、动态库分发、证书信任及当前验收结果见 [本机跨平台支持设计](cross-platform.md)。
 
 阶段 1–4 已实现并完成 Go 检查和真实 VNC/RDP 回环验证。阶段 5 已提供 Linux amd64 自包含发行包、离线安装器、自检、共用 Skill 和手动构建工作流；尚未在线发布，也未完成各 Agent 客户端联调。实际覆盖和未完成项见 [验证记录](validation.md)。
 
-已完成配置中的 Linux VNC、macOS 屏幕共享和 Windows RDP 实机基础矩阵，并修复 Mac 非 BMP 文本丢失。Windows 双轴滚动按两次单轴命令缓解，暂不优先修改协议实现。后续处理 ARD 水平滚动，覆盖 Linux xrdp、证书与会话策略互操作，然后再扩展本机平台、剪贴板和可选显示。维持两个公开 CLI 的职责边界，不引入与 remote-shell 重叠的任意 shell 执行接口。
+已完成配置中的 Linux VNC、macOS 屏幕共享和 Windows RDP 实机基础矩阵，并修复 Mac 非 BMP 文本丢失。Windows 双轴滚动按两次单轴命令缓解，暂不优先修改协议实现。后续处理 ARD 水平滚动，覆盖 Linux xrdp、证书与会话策略互操作，继续完善本机平台验收，后续再扩展剪贴板和可选显示。维持两个公开 CLI 的职责边界，不引入与 remote-shell 重叠的任意 shell 执行接口。

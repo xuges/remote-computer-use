@@ -1,121 +1,66 @@
-# 本机跨平台支持设计
+# 本机跨平台支持
 
-状态：设计与可行性检查，2026-09-30。本文描述下一阶段目标，**不表示四个平台已经可以运行或已经发布**。
+状态：已实现四个构建目标，2026-09-30。Linux x64、macOS arm64、Windows x64 使用现有机器验证；Linux arm64 使用 Ubuntu 22.04 ARM64 用户空间和 QEMU 验证，尚无 ARM Linux 实机验收。开发包未在线发布。
 
-## 目标矩阵
+## 平台矩阵
 
-用户指定的本机平台映射为四个 Go/发行目标。远端协议和系统矩阵独立于本机平台：每个本机发行包最终都应支持 VNC 和 RDP，能够连接远端 Linux、macOS、Windows。
+| 本机目标 | 原生库 | 发行格式 | 当前验证基线 |
+| --- | --- | --- | --- |
+| Windows amd64 | DLL | zip + install.ps1 | Windows 10 22H2 x64 |
+| Linux amd64 | ELF .so | tar.gz + install.sh | Ubuntu 22.04，glibc 2.35+ |
+| Linux arm64 | ELF .so | tar.gz + install.sh | Ubuntu 22.04 ARM64，QEMU |
+| macOS arm64 | Mach-O .dylib | tar.gz + install.sh | macOS 15.7.7；当前依赖要求 macOS 15.0+ |
 
-| 本机目标 | Go target | 原生库 | 发行格式 | 初始验收基线 |
-| --- | --- | --- | --- | --- |
-| Windows x64 | windows/amd64 | DLL | zip + install.ps1 | Windows 10 22H2 / Windows 11 x64 |
-| Linux x64 | linux/amd64 | ELF .so | tar.gz + install.sh | glibc 2.35+，沿用 Ubuntu 22.04 |
-| Linux arm64 | linux/arm64 | ELF .so | tar.gz + install.sh | glibc 2.35+，Ubuntu 22.04 arm64 |
-| macOS arm64 | darwin/arm64 | Mach-O .dylib | tar.gz + install.sh | 暂以 macOS 14+ 为发行目标，待依赖部署版本检查确认 |
+macOS 最低版本由每个 dylib 的 `LC_BUILD_VERSION` / `LC_VERSION_MIN_MACOSX` 推导，记录在包内 `runtime-manifest.json`。当前 Homebrew 依赖需要 15.0，不能把最初规划的 14.0 当作已支持。macOS 库采用 ad-hoc 签名，尚未完成 Developer ID 签名、公证及真实下载隔离属性验收。
 
-macOS 的最低版本不能只由 Go 决定：Go 1.25 的最低要求是 macOS 12，但实际发行包还受所链接的原生库部署版本影响，必须检查每个 Mach-O 的最低系统版本。[Go 1.25 发布说明](https://go.dev/doc/go1.25)
+本机平台与被操作桌面的系统相互独立。每个目标都包含 VNC 与 RDP 后端；“后端可加载”“协议测试通过”“所有目标桌面组合实测”是不同层级，详细边界见 [验证记录](validation.md)。
 
-继续保持两个 CLI、现有命令及配置字段。`go:embed` 保留，各目标仅携带本平台的依赖，不把四个平台的库塞进每个程序。发行文件统一为 `remote-computer-use-<version>-<goos>-<goarch>`。
+## 架构与系统差异
 
-## 当前代码检查结果
-
-对当前提交进行不含内嵌库的 ctl 交叉编译检查：
-
-| 目标 | 观察到的结果 | 含义 |
-| --- | --- | --- |
-| Linux amd64 | 既有构建、安装、真实协议测试已通过 | 当前唯一完整验证的本机平台 |
-| Linux arm64 | `daemon.go` 使用的 `syscall.Dup2` 不存在，编译失败 | 即使同属 Linux，也需要处理架构差异 |
-| macOS arm64 | 生成 arm64 Mach-O 成功 | 后端仍显式拒绝非 Linux，不能据此称为可运行 |
-| Windows amd64 | `runtimebundle` 使用的 `syscall.Stat_t` 不存在，编译失败 | 还存在 flock、Setsid、Dup/Dup2、Unix 权限等后续问题 |
-
-原生层还使用 pthread、unistd/usleep、arpa/inet.h，以及仅面向 ELF 的导出声明。发行脚本固定 Linux amd64，并依赖 ldd、patchelf、dpkg；安装脚本使用 GNU `mv -T`，不能直接在 macOS 执行。
-
-已只读确认现有 SSH 连接中有 macOS arm64 和 Windows x64 可用于后续验收；未安装依赖、上传程序或更改这些主机。Mac 现有 Go 为 1.24.9，低于项目要求；原生构建工具与依赖不齐全。尚未确认原生 Linux arm64 测试机。
-
-## 主要技术决策
-
-### 1. 复用协议实现，拆分本机平台层
-
-继续使用 libgvnc + FreeRDP，不为了跨平台重写 VNC/RDP。四个目标共用输入、截图、状态机与 C ABI。Homebrew 提供 gtk-vnc/FreeRDP，MSYS2 提供 UCRT64 对应包，说明现有库有可利用的构建路径；正式产物仍需自行裁剪和固定版本，不能直接打包完整 GUI 客户端及依赖。[Homebrew gtk-vnc](https://formulae.brew.sh/formula/gtk-vnc)、[Homebrew FreeRDP](https://formulae.brew.sh/formula/freerdp)、[MSYS2 包目录](https://packages.msys2.org/packages/)
-
-新增内部 `host` 平台层，用 build tags 隔离系统调用，负责：私有目录与文件检查、互斥锁、IPC 监听与拨号、后台进程启动、启动应答管道和原生日志隔离。应用层不再直接操作 syscall 或假设 `.sock` 文件存在。动态库名称和加载策略由 backend 的平台文件负责。
-
-Windows 原生构建首期采用 MinGW-w64 UCRT64，可复用 winpthreads，不同时维护 MSVC 构建路径。补齐 `__declspec(dllexport)`、Winsock 地址接口、睡眠和标准流处理。Linux/macOS 保留 pthread。C ABI 继续使用定宽整数和显式缓冲区长度，检查 Windows LLP64 与 Unix LP64 的区别；仅在确实改变 ABI 时升级版本。
-
-### 2. IPC 与后台生命周期按系统实现
+继续复用 libgvnc 与固定 FreeRDP 3.25.0。Go CLI 使用 `CGO_ENABLED=0`，通过动态 FFI 加载原生适配库；C ABI 不变，不从 C 回调 Go。Windows 原生构建采用 MinGW-w64 UCRT64，不引入 MSYS 运行时依赖。
 
 | 项目 | Linux / macOS | Windows |
 | --- | --- | --- |
-| IPC | Unix domain socket | 本地 named pipe |
-| 连接锁 | flock，持有到原生连接关闭 | 文件句柄独占或 LockFileEx，持有到关闭 |
-| 目录与配置保护 | UID、0700 / 0600 | 当前用户 SID 与 DACL |
-| worker 启动 | 脱离启动终端的进程会话 | 无新控制台窗口，显式限制句柄继承 |
-| 原生日志隔离 | 保存启动管道后重定向 fd | 分别处理 Win32 标准句柄与 C 运行时标准流 |
+| IPC | 认证的 loopback HTTP | 相同接口 |
+| 生命周期锁 | flock + close-on-exec | 独占文件句柄，拒绝重解析点 |
+| 目录与文件保护 | 当前 UID，0700 / 0600 | 当前 SID、受保护 DACL，保留 SYSTEM/Administrators |
+| 后台进程 | Setsid，重定向标准流 | 无新控制台窗口，分别隔离 Win32 与 C 标准流 |
+| 动态库加载 | 平台 dlopen | 绝对路径 LoadLibraryEx，限定库目录与 System32 |
+| RDP 系统信任 | Linux OpenSSL CA；macOS Security.framework | Windows 证书链与 SSL 策略 API |
 
-Windows named pipe 优先使用 `go-winio`，显式配置仅允许当前用户及必要系统主体的 DACL，并拒绝远程管道客户端。命名包含用户 SID 和规范化运行目录的哈希，支持并行测试和多用户隔离。默认权限不能视为足够私有。[go-winio](https://github.com/microsoft/go-winio)、[Microsoft 命名管道权限](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights)
+HTTP 取代最初设计的 Unix socket / Windows named pipe，解决跨平台 IPC 差异，并为操作节点转发留下接口边界。每连接随机端口、独立 256 位令牌、禁止代理及重定向；详细约束见 [HTTP 接口设计](http-ipc.md)。当前不开放远端 API。
 
-查询与 `disconnect --all` 改为发现安全的连接状态记录，再实际探测对应 IPC；不能只依赖扫描 `.sock`，也不能把旧状态文件当作活连接。保留“断开等待后端清理完成”的语义。
+Windows 私有目录通过创建时的 security descriptor 原子设置权限，避免并发首次释放看见尚未保护的目录；文件显式设置所有者，兼容管理员会话默认以 Administrators 为所有者的行为。已有不安全目录不被自动修正。缓存文件名拒绝大小写冲突、设备名、冒号、路径分隔符、尾随点/空格和重解析点。
 
-凭据仍仅经私有启动管道传递，不加入命令行或普通状态文件。Windows 的静默要求是 worker 不弹出控制台，并不意味着用户在终端调用的 CLI 没有 stdout。
+VNC 的认证范围沿用现有实现；VeNCrypt X509 与企业证书组合仍需专项实测。RDP 的指纹固定及 `tls_verify = false` 语义保持不变，默认不跳过证书校验。
 
-macOS 默认 TMPDIR 往往较长，需要选用短且按 UID 隔离的 socket 目录；现有 58 字节目录限制要按实际完整 socket 路径处理。不通过关闭路径长度检查解决。
+## 运行库与安装
 
-### 3. 配置路径保持熟悉，运行数据遵循平台
+`scripts/bundle-runtime.py` 在目标平台递归收集依赖闭包，生成带 SHA-256 的 manifest 和压缩载荷。`go:embed` 只嵌入本目标的库，由 ctl 在首次自检/连接时释放。use 不重复携带同一份载荷。
 
-所有平台继续使用 `~/.remote-computer-use/config.toml`；Windows 的 `~` 是用户配置目录。既有 `REMOTE_COMPUTER_CONFIG`、`REMOTE_COMPUTER_LIB_DIR`、`REMOTE_COMPUTER_RUN_DIR`、`REMOTE_COMPUTER_CACHE_DIR` 保持可用。
+- Linux：保留宿主 glibc/加载器，其余库设为 `$ORIGIN` RUNPATH；拒绝高于 glibc 2.35 的符号需求。
+- macOS：保留系统 Frameworks/libSystem，第三方依赖改为 `@loader_path`，移除构建路径，重新签名后计算哈希。
+- Windows：读取 PE imports，保留系统 DLL/API sets，其余 DLL 放入同一私有目录；运行时不依赖 MSYS2/PATH。
 
-缓存默认采用 Go 的平台缓存目录：Linux 的 XDG cache、macOS 的用户 Library/Caches、Windows 的 LocalAppData。Windows 配置和缓存不能通过 `FileMode & 0077` 判断私密性，也不能认为 `chmod 600` 已保护文件；必须真正设置和检查 ACL、所有者及重解析点。安装器只创建项目自己的私有目录，不递归修改整个用户目录权限。
+包内保留库来源、版本与许可文本。Homebrew 缺失的许可文件从安装时 formula 记录的源码 URL 获取，并校验其 SHA-256；MSYS2 保留包信息和包内许可，标准 GNU 许可文本作为补充。所有下载只发生在构建阶段，安装与运行不下载依赖。
 
-Windows 的同名文件大小写、保留文件名、冒号/备用数据流、反斜杠、junction 等需要进入归档与缓存校验规则。缓存继续逐文件校验、按内容哈希隔离、完整目录原子发布；升级不覆盖已加载 DLL，不自动删除旧缓存。
+Linux/macOS 安装器使用版本目录和原子链接切换；Windows 使用版本目录及 `.cmd` 入口，不要求符号链接权限。三个安装入口都保留已有配置，可选安装 Agent Skill，不隐式修改 PATH。升级到 HTTP 版前须用旧 ctl 断开旧 Unix socket worker。
 
-### 4. 运行库分平台收集和加载
+## 构建与验证
 
-| 平台 | 依赖收集与重定位 | 系统提供的部分 |
-| --- | --- | --- |
-| Linux | ELF DT_NEEDED 闭包，逐库 `$ORIGIN` RUNPATH | glibc 与加载器 |
-| macOS | Mach-O 依赖闭包，改为 `@loader_path` / 合适的 install name | libSystem、系统 Frameworks |
-| Windows | PE imports 依赖闭包，随包携带第三方 DLL | Windows 系统 DLL、API sets 与目标系统已有的 UCRT |
+Linux 的构建步骤见 README。macOS 示例：
 
-Windows 当前 FFI 封装调用普通 `LoadLibrary`，不能保证从释放目录解析传递依赖。平台加载器应使用绝对路径和受限的 `LoadLibraryExW` 搜索范围（库目录及 System32），不能靠修改工作目录或把缓存目录加入全局 PATH。[Microsoft DLL 搜索顺序](https://learn.microsoft.com/zh-cn/windows/win32/dlls/dynamic-link-library-search-order)
+```sh
+brew install cmake ninja gtk-vnc openssl@3 pkgconf
+scripts/build-freerdp.sh
+PKG_CONFIG_PATH="$PWD/.cache/freerdp/lib/pkgconfig" make native
+make build test native-input-test
+go run ./tests/portable
+make release VERSION=dev
+```
 
-macOS 修改 Mach-O 后重新签名，**签名完成后**才计算哈希并嵌入。开发版可以使用 ad-hoc 签名；正式开箱即用发行需另行完成 Developer ID 签名、公证及真实下载场景测试，不能把 ad-hoc 视为已满足分发信任要求。[Apple 代码签名格式](https://developer.apple.com/documentation/xcode/using-the-latest-code-signature-format)、[Apple 公证要求](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
+Windows 在 MSYS2 UCRT64 shell 中安装 gcc、cmake、ninja、pkgconf、python、gtk-vnc、openssl 对应的 `mingw-w64-ucrt-x86_64-*` 包及 make/tar/curl，然后执行相同的 FreeRDP/native/build/release 步骤。构建脚本处理 MinGW 缺少 C11 `threads.h`、FreeRDP unwind 分支和 GCC 14+ 对旧源码指针类型诊断的变化；协议代码未因此改变。
 
-不把系统证书、用户凭据和构建机的 Homebrew/MSYS2 路径固化进包。各发行包继续附第三方许可和版本来源清单，检查不存在指向开发机器的依赖。
+`tests/portable` 提供隔离的 RFB 桌面，使用真实 CLI 和原生 VNC 库检查 PNG 颜色、Unicode、键鼠、请求取消、重连、长路径及中文路径，不向用户真实桌面发送测试文字。Linux 的 TigerVNC / FreeRDP shadow 测试继续覆盖认证、证书、增量画面和尺寸变化。`tests/package.py` 与 `tests/package-windows.py` 分别验证安装、重装、缓存和自包含运行。
 
-### 5. 系统证书信任必须单独处理
-
-当前 RDP 验证通过 OpenSSL 默认路径加载 CA。在 Windows/macOS 上，这不等于自动使用系统信任库，也可能指向构建机的安装前缀。
-
-目标是保持一致的证书策略：Windows 使用系统证书链验证能力，macOS 使用 Security.framework 的 TLS 信任验证，Linux 保持现有系统 CA 验证；可在 C 适配层封装平台差异，保留“不从 C 回调 Go”的现有边界。VNC 的 GnuTLS 系统信任行为也需按实际构建验证，不能由函数名推断平台支持范围。
-
-已有固定指纹和显式 `tls_verify = false` 语义保持不变。默认验证不可因平台移植自动变为跳过；系统 CA 尚未实现或测试通过的平台不能标为完整兼容。
-
-### 6. 安装入口保持简单
-
-Linux/macOS 提供 POSIX 兼容的 `install.sh`；Windows 提供 PowerShell `install.ps1`，正常安装不需要管理员权限、MSYS2、Go、Homebrew 或编译器。
-
-Windows 安装使用版本目录和普通入口程序路径，避免要求开发者模式才能创建符号链接。已加载 EXE/DLL 的升级和旧版本保留采用 Windows 可用的文件操作。配置永不覆盖；Agent Skill 可选安装；路径包含中文、空格时正常工作。PATH 修改为显式选项或给出当前会话命令，不隐式改系统 PATH。
-
-## 实施顺序与阶段提交
-
-1. **平台层**：分离文件保护、IPC、锁、worker 启动和日志隔离；四目标 Go 编译进入 CI；Linux amd64 既有功能持续回归。
-2. **Linux arm64**：处理 Dup2/Dup3 差异，打包器识别原生架构；使用 Ubuntu 22.04 arm64 构建原生依赖，验收最小运行环境和真实协议。QEMU 可用于早期检查，不代替原生稳定性验证。
-3. **macOS arm64**：构建无显示依赖的 libgvnc/FreeRDP，dylib 重定位与签名、系统信任、POSIX 安装脚本，使用现有 Mac 验收。
-4. **Windows x64**：named pipe、ACL、进程/标准流、受限 DLL 加载、UCRT64 原生构建、系统信任、PowerShell 安装器，使用现有 Windows 验收。
-5. **发行矩阵**：各平台原生 runner 分别构建和测试，再汇总四种归档与校验和；发布级签名、公证独立记录。实际完成的平台才进入正式发行列表。
-
-Linux arm64 与 macOS 的优先级高于 Windows，是因为可以复用更多已有进程和文件语义；Windows 工作仍从平台层阶段开始，不等其他平台全部结束后才设计。
-
-## 验收条件
-
-每个目标逐级标记“编译通过 / 后端加载通过 / 协议功能通过 / 自包含发行通过”，不可混为一个“支持”。
-
-- 原生系统运行 `doctor`；没有 FreeRDP、libgvnc、Homebrew、MSYS2 和构建目录仍能加载库。
-- 配置保留、首次安装、重复安装、升级、中文/空格路径、缓存首次并发释放、错误权限与损坏拒绝。
-- worker 在发起命令退出后继续存在，不显示本机 GUI/控制台；退出和立即重连正常，取消释放键鼠。
-- 跨本机用户无法读取连接秘密或控制 IPC；状态与日志继续脱敏。
-- 每个本机平台都跑 VNC 与 RDP 协议夹具：认证/TLS/错误证书、PNG、Unicode、键鼠、尺寸变化、断线；新增 Windows/macOS IPC 测试不依赖 Linux 的 socket 文件行为。
-- 最终覆盖“4 个本机目标 × 3 类远端桌面”，至少逐组合验证连接、截图和输入；原有 Mac emoji 与 ARD 水平滚轮回归保留。
-- 正式发行检查实际下载后的系统执行策略与签名，不以开发机运行成功代替安装验收。
-
-本轮只完成调查、设计和编译探测，没有改变已发布接口或将未验证的平台宣布为可用。
+手动 GitHub Actions 工作流提供四目标构建矩阵；尚未在 GitHub 上触发。runner 标签按 [GitHub 官方列表](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) 配置，实际通过情况以运行结果为准。Linux arm64 的 QEMU 验证不能替代原生稳定性、性能和完整桌面矩阵验收。

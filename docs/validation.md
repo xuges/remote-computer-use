@@ -107,5 +107,33 @@ Safari 显示 `Exact match: PASS`，实际字符串与预期逐码点一致，�
 - 更多非拉丁文字、键盘布局和输入法组合。
 - 长时间运行、网络抖动、大分辨率负载、原生 sanitizer；Go race detector 不覆盖 C 层。
 - 原生进程崩溃恢复、RDP 动态分辨率、物理多显示器专项验收。
-- 本机 macOS / Windows 移植、剪贴板输入、视频显示、音频、文件/设备重定向不在本次实现范围。
+- 剪贴板输入、视频显示、音频、文件/设备重定向尚未实现；本机跨平台进展见下节。
 - Codex、OpenCode、Claude Code 的完整端到端联调；现有验证只覆盖 Skill 格式与安装流程。
+
+## 本机跨平台与 HTTP 验证（2026-09-30）
+
+本轮沿用已有 SSH 连接上传源码，在 Mac arm64 与 Windows x64 上构建、执行 CLI。安装了 Mac Homebrew 构建依赖、Windows MSYS2 UCRT64 构建依赖；运行包本身不需要这些工具。Linux ARM64 没有实机，使用独立 Ubuntu 22.04 ARM64 用户空间、交叉编译器与 QEMU，未把它记录为实机通过。
+
+| 项目 | Linux amd64 | macOS arm64 | Windows amd64 | Linux arm64 |
+| --- | --- | --- | --- | --- |
+| 两个 CLI / 原生后端构建 | 通过 | 实机通过 | 实机通过 | 交叉编译通过 |
+| Go race / vet | 通过 | 实机通过 | 实机通过 | 未跑 race |
+| 内嵌运行库加载 | glibc-only 根目录通过 | 重定位 dylib 通过 | 仅系统 PATH 通过 | QEMU 通过 |
+| VNC 隔离桌面操作 | 通过 | 实机通过 | 实机通过 | QEMU 通过 |
+| RDP 连接与截图 | Windows / shadow | Windows，经 SSH 转发 | Linux shadow，经 SSH 转发 | shadow，QEMU |
+| RDP NLA 与输入 | shadow 认证/拒绝与输入通过 | 真实 Windows 认证/截图通过 | shadow NLA、点击/组合键通过 | shadow NLA、点击/组合键通过 |
+| 安装、重装、缓存并发、配置保留 | 通过 | 通过 | 通过 | QEMU 通过 |
+
+隔离 RFB 测试执行真实 CLI → HTTP → 原生 libgvnc 链路，检查 640×480 红色 PNG、中文及 emoji 的按下/释放、组合键、双击、拖拽、滚轮、终止请求后的按钮释放、单个/全部连接重连。运行目录刻意超过旧 socket 路径限制并包含中文和空格。测试不操作用户正在使用的真实 Linux 桌面。
+
+Linux 原有 TigerVNC / FreeRDP shadow 回归通过，覆盖认证失败、TLS 默认拒绝/指纹匹配/不匹配/显式跳过、NLA、颜色、输入、尺寸变化、取消、部分批量失败及脱敏。Mac 原生 ARD UTF-16 代理对专项测试也通过。Windows 私有 ACL 测试确认 Everyone 可访问的文件被拒绝，缓存测试发现并修复了管理员默认所有者与目录创建/权限设置之间的并发窗口。
+
+Mac 使用发行包连接真实屏幕共享，获取 1650×1050 PNG。Mac 到配置 Windows RDP 的直接 TCP 探测不可达；通过现有 SSH 会话临时转发协议流后，RDP 认证、状态和 1600×900 PNG 通过。测试结束关闭临时连接与转发，不在产品中新增隧道命令。
+
+Windows 与 ARM64 连接独立 Linux shadow NLA 桌面，取得 640×480 PNG；点击和 CTRL+A 在服务端事件日志得到确认。`type Hello` 命令返回成功，但 shadow 事件日志没有提供逐字符确认，因此本轮不将其描述为 RDP 文本逐字符验收。VNC 隔离桌面的 Unicode 已逐事件验证。
+
+Windows 在本机回连自身 RDP 时返回 `AUTH_FAILED`，与从 Linux/Mac 连接同一 Windows 的结果不同；此场景单独记录，不以 shadow 通过掩盖。企业 CA、域/SSO、VNC X509 和所有“本机 × 远端桌面”组合仍需扩展验收。
+
+发行包分别包含 Linux x64 41 个、Linux arm64 41 个、Mac 25 个、Windows 42 个原生库。Mac 最低系统版本从 Mach-O 部署命令推导为 15.0；包使用 ad-hoc 签名，尚无 Developer ID/公证和下载隔离属性测试。GitHub 四平台工作流已配置但未触发，不能把本地执行结果写成 CI 已通过。
+
+升级注意：本次 HTTP worker 与旧 Unix socket worker 不互通。先用旧 ctl 断开，再使用新 CLI 重连；令牌仅保存在私有 endpoint 文件，不进入 ctl 查询输出。
