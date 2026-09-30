@@ -5,7 +5,7 @@ import (
 	ffi "github.com/goexlib/cgo"
 	"github.com/xuges/remote-computer-use/internal/config"
 	"github.com/xuges/remote-computer-use/internal/core"
-	"os"
+	"github.com/xuges/remote-computer-use/internal/runtimebundle"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -30,15 +30,8 @@ func Open(c config.Private) (Backend, error) {
 	if runtime.GOOS != "linux" {
 		return nil, core.Unsupported
 	}
-	exe, e := os.Executable()
+	dir, e := runtimebundle.Directory()
 	if e != nil {
-		return nil, core.MissingBackend
-	}
-	dir := os.Getenv("REMOTE_COMPUTER_LIB_DIR")
-	if dir == "" {
-		dir = filepath.Dir(exe)
-	}
-	if !filepath.IsAbs(dir) {
 		return nil, core.MissingBackend
 	}
 	if c.Protocol != "vnc" && c.Protocol != "rdp" {
@@ -89,6 +82,40 @@ func Open(c config.Private) (Backend, error) {
 		return nil, core.ConnectFailed
 	}
 	return n, nil
+}
+
+// Check loads each adapter and its dependencies without opening a connection
+// or reading configuration. Callers expose only our public error codes.
+func Check(protocol string) error {
+	if runtime.GOOS != "linux" {
+		return core.Unsupported
+	}
+	if protocol != "vnc" && protocol != "rdp" {
+		return core.InvalidArgs
+	}
+	dir, err := runtimebundle.Directory()
+	if err != nil {
+		return core.MissingBackend
+	}
+	lib, err := ffi.LoadLibrary(filepath.Join(dir, "libremote-computer-"+protocol+".so"))
+	if err != nil {
+		return core.MissingBackend
+	}
+	defer lib.Close()
+	for _, name := range []string{"rcu_open", "rcu_status", "rcu_snapshot", "rcu_free", "rcu_submit", "rcu_result", "rcu_cancel", "rcu_close"} {
+		if _, err := lib.GetSymbol(name); err != nil {
+			return core.MissingBackend
+		}
+	}
+	sym, err := lib.GetSymbol("rcu_abi_version")
+	if err != nil {
+		return core.MissingBackend
+	}
+	var abi func() uint32
+	if ffi.RegisterFunc(&abi, sym.Addr()) != nil || abi() != 2 {
+		return core.MissingBackend
+	}
+	return nil
 }
 
 func nativeError(n int32) error {

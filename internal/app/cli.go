@@ -58,6 +58,9 @@ func emit(v any, j bool) {
 func failure(e error, j bool) int { emit(core.Result{Error: core.Code(e)}, j); return 1 }
 
 func Ctl(args []string) int {
+	if len(args) > 0 && args[0] == "doctor" {
+		return doctor(args[1:])
+	}
 	if len(args) == 1 && args[0] == "--worker" {
 		return Worker()
 	}
@@ -66,7 +69,7 @@ func Ctl(args []string) int {
 		return 0
 	}
 	if len(args) == 0 || args[0] == "--help" {
-		fmt.Println("remote-computer-ctl list|status NAME|connect NAME|disconnect NAME [--json] [--config PATH]\nremote-computer-ctl connect|disconnect --all [--timeout 30s]")
+		fmt.Println("remote-computer-ctl list|status NAME|connect NAME|disconnect NAME [--json] [--config PATH]\nremote-computer-ctl connect|disconnect --all [--timeout 30s]\nremote-computer-ctl doctor [--json]")
 		return 0
 	}
 	op := args[0]

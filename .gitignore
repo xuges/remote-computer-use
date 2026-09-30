@@ -6,3 +6,5 @@
 *.o
 *.png
 coverage.out
+/internal/runtimebundle/payload/
+__pycache__/
