@@ -47,6 +47,8 @@ PrivateConnectionConfig 与 PublicConnectionInfo 必须分离。公开输出只�
 
 TLS 默认验证服务端证书；当前固定指纹功能仅用于 RDP，替代 CA / 主机名验证。VNC 选择 VeNCrypt X509，配置指纹暂返回 UNSUPPORTED。传统无 TLS VNC 需要显式 allow_unencrypted = true，不自动降级。认证成功不表示桌面已解锁。
 
+为兼容常见自签名 RDP 部署，支持显式 `tls_verify = false`：保持 TLS 加密和原有帐号认证，跳过服务端证书身份校验，不降级为 Standard RDP Security。省略时为 true；false 与 certificate_sha256 互斥，VNC 不接受此字段。该策略只属于私有配置，不加入公开状态或错误输出。原生 ABI 升级为版本 2，CLI 和适配库必须一起升级，旧库会被明确拒绝加载。
+
 ## 生命周期
 
 状态为 stopped、connecting、ready、disconnecting、failed。connect 等待认证和首个完整画面，默认 30 秒。重复 connect 健康连接、disconnect 已停止连接是幂等操作。配置变更在重新连接时生效。

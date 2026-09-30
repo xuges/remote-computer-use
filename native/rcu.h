@@ -24,7 +24,7 @@ typedef struct rcu {
     pthread_t thread;
     int stop, state, started;
     char *host, *user, *password, *domain, *fingerprint;
-    uint32_t port, requested_width, requested_height, allow_plain;
+    uint32_t port, requested_width, requested_height, allow_plain, skip_tls_verify;
     uint32_t width, height;
     uint64_t sequence, geometry, covered;
     uint8_t *pixels, *coverage;
@@ -36,7 +36,7 @@ typedef struct rcu {
 
 RCU_API uint32_t rcu_abi_version(void);
 RCU_API rcu *rcu_open(const char *, uint32_t, const char *, const char *, const char *,
-                      const char *, uint32_t, uint32_t, uint32_t);
+                      const char *, uint32_t, uint32_t, uint32_t, uint32_t);
 RCU_API int32_t rcu_status(rcu *, uint64_t *);
 RCU_API uint8_t *rcu_snapshot(rcu *, uint64_t *);
 RCU_API void rcu_free(void *);

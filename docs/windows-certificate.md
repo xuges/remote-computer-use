@@ -2,6 +2,8 @@
 
 当 Windows 已启用 TLS，但使用自签名证书或证书名称不匹配时，客户端可能返回 `TLS_VERIFY_FAILED`。可在确认实际证书后，设置 `certificate_sha256` 固定指纹。
 
+也可在 `[connections.windows]` 下显式设置 `tls_verify = false` 跳过证书校验，适用于用户选择接受自签名服务的场景。此时仍采用 TLS 加密，但不验证服务端身份，无需填写指纹；不能同时配置 `certificate_sha256`。省略 `tls_verify` 时默认校验。
+
 在目标 Windows 本机、或已有可信管理通道中的管理员 PowerShell 执行以下只读命令。它根据 RDP 监听器引用的 SHA-1 定位证书，再计算本项目所需的 SHA-256；不要直接把 Windows 常见的 SHA-1 Thumbprint 填入配置。
 
 ```powershell

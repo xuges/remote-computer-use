@@ -22,13 +22,15 @@ static rcu *owner(freerdp *i) {
     return ((rcu_rdp *)i->context)->s;
 }
 
-// Always verify here: a configured pin must also reject a different CA-valid
-// certificate. No TOFU store, prompting, or certificate material in logs.
+// Certificate policy is explicit per connection. A configured pin must also
+// reject a different CA-valid certificate. No TOFU store or native prompting.
 static int verify(freerdp *i, const BYTE *data, size_t length, const char *host, UINT16 port,
                   DWORD flags) {
     (void)port;
     (void)flags;
     rcu *s = owner(i);
+    if (s->skip_tls_verify)
+        return 1;
     int valid = 0;
     BIO *bio = BIO_new_mem_buf(data, (int)length);
     X509 *cert = bio ? PEM_read_bio_X509(bio, NULL, NULL, NULL) : NULL;

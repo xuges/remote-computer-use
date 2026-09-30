@@ -25,8 +25,13 @@ type Private struct {
 	Width            int    `toml:"width"`
 	Height           int    `toml:"height"`
 	Fingerprint      string `toml:"certificate_sha256"`
+	TLSVerify        *bool  `toml:"tls_verify"`
 	AllowUnencrypted bool   `toml:"allow_unencrypted"`
 }
+
+// Omitted tls_verify retains certificate verification, including for callers
+// constructing Private directly rather than decoding TOML.
+func (c Private) SkipTLSVerification() bool { return c.TLSVerify != nil && !*c.TLSVerify }
 
 type File struct {
 	Version     int                `toml:"version"`
@@ -86,6 +91,9 @@ func Load(path string) (File, error) {
 		}
 		c.Fingerprint = strings.ToLower(strings.ReplaceAll(c.Fingerprint, ":", ""))
 		if c.Fingerprint != "" && !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(c.Fingerprint) {
+			return File{}, core.InvalidConfig
+		}
+		if (c.TLSVerify != nil && c.Protocol != "rdp") || (c.SkipTLSVerification() && c.Fingerprint != "") {
 			return File{}, core.InvalidConfig
 		}
 		f.Connections[n] = c

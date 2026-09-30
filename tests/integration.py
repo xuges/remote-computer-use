@@ -171,12 +171,30 @@ port = {rdp_port}
 username = "PRIVATE-USER"
 password_env = "RCU_TEST_SECRET"
 certificate_sha256 = "{'0' * 64}"
+[connections.unverified]
+protocol = "rdp"
+host = "127.0.0.1"
+port = {rdp_port}
+username = "PRIVATE-USER"
+password_env = "RCU_TEST_SECRET"
+tls_verify = false
+[connections.systemtrust]
+protocol = "rdp"
+host = "127.0.0.1"
+port = {rdp_port}
+username = "PRIVATE-USER"
+password_env = "RCU_TEST_SECRET"
 '''
                 with Path(env['REMOTE_COMPUTER_CONFIG']).open('a') as f:
                     f.write(extra)
                 time.sleep(.3)
                 rejected = json.loads(call(CTL, 'connect', 'untrusted', '--json', ok=False).stdout)
                 assert rejected['error'] == 'TLS_VERIFY_FAILED', rejected
+                rejected = json.loads(call(CTL, 'connect', 'systemtrust', '--json', ok=False).stdout)
+                assert rejected['error'] == 'TLS_VERIFY_FAILED', rejected
+                call(CTL, 'connect', 'unverified', '--json')
+                Image.open(io.BytesIO(call(USE, '--conn', 'unverified', 'screenshot', '--output', '-').stdout)).load()
+                call(CTL, 'disconnect', 'unverified', '--json')
                 call(CTL, 'connect', 'rdp', '--json')
                 for _ in range(30):
                     data = call(USE, '--conn', 'rdp', 'screenshot', '--output', '-').stdout
@@ -213,10 +231,12 @@ certificate_sha256 = "{fingerprint}"
 ''')
                 auth = json.loads(call(CTL, 'connect', 'rdpauthbad', '--json', ok=False).stdout)
                 assert auth['error'] == 'AUTH_FAILED', auth
+                call(CTL, 'connect', 'unverified', '--json')
+                call(CTL, 'disconnect', 'unverified', '--json')
                 call(CTL, 'connect', 'rdp', '--json')
                 call(USE, '--conn', 'rdp', 'screenshot', '--output', '-')
                 call(CTL, 'disconnect', 'rdp', '--json')
-                print('PASS: real headless RDP, TLS certificate pinning/rejection, NLA authentication/rejection, RGB screenshot, pointer and keyboard')
+                print('PASS: real headless RDP, default certificate validation, pinning/rejection, explicit verification skip, NLA authentication/rejection, RGB screenshot, pointer and keyboard')
             call(CTL, 'connect', '--all', '--json', ok=False)
             call(CTL, 'status', 'test', '--json')  # batch failure did not roll back
             server.terminate()

@@ -7,7 +7,7 @@
 
 与 [remote-shell](https://github.com/xuges/remote-shell) 独立互补：remote-shell 处理远程命令和文件，本项目处理 GUI。远端只需提供 VNC / RDP 服务，无需安装本项目的执行助手。本机不打开窗口，不依赖 DISPLAY、Wayland、Xvfb 或外部键鼠工具；截图来自协议解码后的内存画面。
 
-目前是首个可运行版本，本机支持 Linux，已验证 Ubuntu 22.04 x86_64。远端 macOS、Windows 和 Linux 的覆盖目标依赖各自 VNC / RDP 服务；自动化集成测试使用 TigerVNC 和 FreeRDP shadow。**Mac 实机已验证 VNC 连接与截图，键鼠尚未验证；Windows 实机尚未连接成功。** 详细架构与后续计划见 [设计文档](docs/design.md)，测试边界见 [验证记录](docs/validation.md)。
+目前是首个可运行版本，本机支持 Linux，已验证 Ubuntu 22.04 x86_64。远端 macOS、Windows 和 Linux 的覆盖目标依赖各自 VNC / RDP 服务；自动化集成测试使用 TigerVNC 和 FreeRDP shadow。**Mac VNC、Windows RDP 实机均已验证连接与截图，实机键鼠尚未验证。** 详细架构与后续计划见 [设计文档](docs/design.md)，测试边界见 [验证记录](docs/validation.md)。
 
 ## 构建
 
@@ -58,6 +58,7 @@ chmod 600 ~/.remote-computer-use/config.toml
 连接安全策略：
 
 - RDP 使用 TLS / NLA，默认验证系统 CA 和主机名；可设置 `certificate_sha256` 固定证书。指纹须通过可信渠道取得，不自动接受未知证书。固定指纹替代 CA / 主机名验证。
+- 对于常见自签名 RDP 服务，可显式设置 `tls_verify = false` 跳过证书校验，仍使用 TLS 加密，但不验证服务端身份。它与 `certificate_sha256` 互斥，仅适用于 RDP；省略时默认为 `true`，不会在失败后自动跳过校验。
 - Windows 自签名证书的只读指纹获取步骤见 [Windows RDP 证书指纹](docs/windows-certificate.md)。
 - VNC 优先选择 VeNCrypt X509；传统 VNC/ARD/无认证连接须显式设置 `allow_unencrypted = true`。不自动选择匿名 TLS。目前 VNC 不支持 `certificate_sha256`，设置后返回 `UNSUPPORTED`。
 - 查询、错误和日志只输出别名、协议、状态、画面尺寸等公开字段，不输出主机、端口、帐号、密码或证书信息。配置和进程内存仍属于本机私有数据。

@@ -3,11 +3,11 @@
 #include <string.h>
 
 uint32_t rcu_abi_version(void) {
-    return 1;
+    return 2;
 }
 rcu *rcu_open(const char *host, uint32_t port, const char *user, const char *password,
               const char *domain, const char *fingerprint, uint32_t width, uint32_t height,
-              uint32_t plain) {
+              uint32_t plain, uint32_t skip_tls_verify) {
     rcu *s = calloc(1, sizeof(*s));
     if (!s)
         return NULL;
@@ -21,6 +21,7 @@ rcu *rcu_open(const char *host, uint32_t port, const char *user, const char *pas
     s->requested_width = width;
     s->requested_height = height;
     s->allow_plain = plain;
+    s->skip_tls_verify = skip_tls_verify;
     if (!s->host || !s->user || !s->password || !s->domain || !s->fingerprint) {
         rcu_close(s);
         return NULL;

@@ -60,7 +60,7 @@ func Open(c config.Private) (Backend, error) {
 		return nil
 	}
 	var abi func() uint32
-	var open func(string, uint32, string, string, string, string, uint32, uint32, uint32) uintptr
+	var open func(string, uint32, string, string, string, string, uint32, uint32, uint32, uint32) uintptr
 	bindings := []struct {
 		name string
 		fn   any
@@ -71,7 +71,7 @@ func Open(c config.Private) (Backend, error) {
 			return nil, core.MissingBackend
 		}
 	}
-	if abi() != 1 {
+	if abi() != 2 {
 		lib.Close()
 		return nil, core.MissingBackend
 	}
@@ -79,7 +79,11 @@ func Open(c config.Private) (Backend, error) {
 	if c.AllowUnencrypted {
 		plain = 1
 	}
-	n.handle = open(c.Host, uint32(c.Port), c.Username, c.Password, c.Domain, c.Fingerprint, uint32(c.Width), uint32(c.Height), plain)
+	skipVerify := uint32(0)
+	if c.SkipTLSVerification() {
+		skipVerify = 1
+	}
+	n.handle = open(c.Host, uint32(c.Port), c.Username, c.Password, c.Domain, c.Fingerprint, uint32(c.Width), uint32(c.Height), plain, skipVerify)
 	if n.handle == 0 {
 		lib.Close()
 		return nil, core.ConnectFailed

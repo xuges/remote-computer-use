@@ -1,9 +1,11 @@
 package config
 
 import (
+	"encoding/json"
 	"github.com/xuges/remote-computer-use/internal/core"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -28,6 +30,45 @@ func TestConfigRejectsAmbiguityAndProtectsSecrets(t *testing.T) {
 				}
 			} else if e != core.InvalidConfig {
 				t.Fatalf("expected safe error, got %v", e)
+			}
+		})
+	}
+}
+
+func TestTLSVerificationPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name, protocol, extra string
+		valid, skip           bool
+	}{
+		{"default verifies", "rdp", "", true, false},
+		{"explicit verification", "rdp", "tls_verify = true\n", true, false},
+		{"explicit skip", "rdp", "tls_verify = false\n", true, true},
+		{"pin with verification", "rdp", "tls_verify = true\ncertificate_sha256 = '" + strings.Repeat("a", 64) + "'\n", true, false},
+		{"conflicting pin", "rdp", "tls_verify = false\ncertificate_sha256 = '" + strings.Repeat("a", 64) + "'\n", false, false},
+		{"wrong type", "rdp", "tls_verify = 'false'\n", false, false},
+		{"VNC does not support this option", "vnc", "tls_verify = false\n", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "config.toml")
+			body := "version = 1\n[connections.test]\nprotocol = '" + tc.protocol + "'\nhost = 'test.invalid'\n" + tc.extra
+			if err := os.WriteFile(p, []byte(body), 0600); err != nil {
+				t.Fatal(err)
+			}
+			f, err := Load(p)
+			if !tc.valid {
+				if err != core.InvalidConfig {
+					t.Fatal("ambiguous certificate policy accepted")
+				}
+				return
+			}
+			if err != nil || f.Connections["test"].SkipTLSVerification() != tc.skip {
+				t.Fatal("incorrect certificate policy")
+			}
+			// Private configuration passes through JSON when starting the worker.
+			data, err := json.Marshal(f.Connections["test"])
+			var worker Private
+			if err != nil || json.Unmarshal(data, &worker) != nil || worker.SkipTLSVerification() != tc.skip {
+				t.Fatal("certificate policy lost during worker startup")
 			}
 		})
 	}
