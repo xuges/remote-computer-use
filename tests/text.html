@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RCU TEXT TEST</title>
+<style>
+body{font:20px monospace;margin:20px;background:#fff;color:#111}
+textarea{display:block;width:90%;height:120px;font:24px monospace;margin:12px 0}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}
+</style>
+<h2>RCU TEXT TEST - temporary page</h2>
+<p>Type the expected text below, including the newline, into the empty field.</p>
+<pre id="expected"></pre>
+<textarea id="input" autofocus></textarea>
+<pre id="result"></pre>
+<script>
+// Escapes let this page itself be entered through an ASCII-only data URL.
+const expected="A\ud83d\ude00B | \u4e2d\u6587 \u00e9 e\u0301 | \ud840\udc00\ud834\udd1e | \ud83d\ude00\ud83d\ude00 | \ud83d\udc4d\ud83c\udffd\ud83d\udc69\u200d\ud83d\udcbb\ud83c\udde8\ud83c\uddf3\nEND";
+const input=document.getElementById('input'),result=document.getElementById('result');
+document.getElementById('expected').textContent=expected;
+const points=s=>Array.from(s,c=>c.codePointAt(0).toString(16)).join(' ');
+const show=()=>{
+  const actual=input.value;
+  result.textContent='Exact match: '+(actual===expected?'PASS':'NO')+
+    '\nActual: '+JSON.stringify(actual)+
+    '\nCodepoints: '+points(actual)+
+    '\nExpected codepoints: '+points(expected);
+};
+input.oninput=show;show();
+</script>

@@ -7,7 +7,7 @@
 
 与 [remote-shell](https://github.com/xuges/remote-shell) 独立互补：remote-shell 处理远程命令和文件，本项目处理 GUI。远端只需提供 VNC / RDP 服务，无需安装本项目的执行助手。本机不打开窗口，不依赖 DISPLAY、Wayland、Xvfb 或外部键鼠工具；截图来自协议解码后的内存画面。
 
-目前是首个可运行版本，本机支持 Linux，已验证 Ubuntu 22.04 x86_64。远端 macOS、Windows 和 Linux 的覆盖目标依赖各自 VNC / RDP 服务；自动化集成测试使用 TigerVNC 和 FreeRDP shadow。**已对配置中的 Linux VNC、Mac VNC、Windows RDP 完成连接、截图和键鼠实测。Mac 水平滚动、emoji，以及 Windows 双轴同时滚动仍有兼容性限制。** 详细架构与后续计划见 [设计文档](docs/design.md)，测试边界见 [验证记录](docs/validation.md)。
+目前是首个可运行版本，本机支持 Linux，已验证 Ubuntu 22.04 x86_64。远端 macOS、Windows 和 Linux 的覆盖目标依赖各自 VNC / RDP 服务；自动化集成测试使用 TigerVNC 和 FreeRDP shadow。**已对配置中的 Linux VNC、Mac VNC、Windows RDP 完成连接、截图和键鼠实测，Mac emoji 丢失已修复。Mac 水平滚动，以及 Windows 双轴同时滚动仍有兼容性限制。** 详细架构与后续计划见 [设计文档](docs/design.md)，测试边界见 [验证记录](docs/validation.md)。
 
 ## 构建
 
@@ -92,9 +92,16 @@ remote-computer-use --conn desktop type --stdin < local-text.txt
 
 坐标使用原始 PNG 的像素，左上角为 `(0,0)`，不按缩放后的预览坐标直接点击。滚轮 `dy` 正值向下、`dx` 正值向右，单位为刻度，实际移动距离由服务器和应用决定。Apple ARD 服务的水平滚动暂返回 `UNSUPPORTED`，避免被解释为点击；Windows 实测单轴方向正常，同时指定两轴在 Edge 中尚不稳定，暂分两次调用。截图不额外叠加光标，文件在本机生成；`--output -` 为纯 PNG 流，与 `--json` 互斥。
 
+Windows 需要两个方向滚动时分别调用，并在需要时截图确认：
+
+```sh
+remote-computer-use --conn windows scroll --dx 3
+remote-computer-use --conn windows scroll --dy 3
+```
+
 组合键如 `CTRL+SHIFT+S`、`ALT+F4`、`CMD+L`、`WIN+R`、`ENTER`、`TAB`。按顺序按下、逆序释放；拖拽或组合键中途取消会尽力释放本次按下的键和按钮。首期不公开跨命令持续按住的接口。
 
-文本采用协议键事件：RDP Unicode / VNC keysym，实际字符支持受远端服务器、输入法和应用影响。实测 Linux、Windows 可输入中文和 emoji；Mac 中文正常，但非 BMP 字符（如 😀）会被当前服务端丢弃。首期只支持 `--method keys`，剪贴板方法返回 `UNSUPPORTED`，没有静默降级。敏感文本可从私有输入流传入 `--stdin`，避免放入命令行和终端历史。
+文本采用协议键事件：RDP Unicode / VNC keysym，实际字符支持受远端服务器、输入法和应用影响。实测 Linux、Windows、Mac 均可输入中文和 emoji；识别到 Apple ARD 服务时，非 BMP 字符自动拆成 UTF-16 代理对发送，普通 VNC 保持完整码点。命令用法不变，无需修改远端输入法或剪贴板。首期只支持 `--method keys`，剪贴板方法返回 `UNSUPPORTED`，没有静默降级。敏感文本可从私有输入流传入 `--stdin`，避免放入命令行和终端历史。
 
 静默表示**本机不显示窗口**；远端用户可能看到鼠标和应用变化。桌面登录、锁屏、并发会话由远端服务决定。操作返回成功只代表输入已发送，AI 必须再次截图确认应用结果。切换窗口、打开应用或点击输入框后，先等待并截图确认焦点，再输入文本；启用输入法时，ASCII 也可能被组合转换。超时或断线前可能已执行部分输入，不应盲目重试。
 
