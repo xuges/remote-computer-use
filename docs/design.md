@@ -51,7 +51,7 @@ TLS 默认验证服务端证书；当前固定指纹功能仅用于 RDP，替代
 
 ## 生命周期
 
-状态为 stopped、connecting、ready、disconnecting、failed。connect 等待认证和首个完整画面，默认 30 秒。重复 connect 健康连接、disconnect 已停止连接是幂等操作。配置变更在重新连接时生效。
+状态为 stopped、connecting、ready、disconnecting、failed。connect 等待认证和首个完整画面，默认 30 秒。重复 connect 健康连接、disconnect 已停止连接是幂等操作。disconnect 等待 socket 移除和 worker 生命周期锁释放，确保原生后端清理完成后才允许紧接着重连。配置变更在重新连接时生效。
 
 connect --all 连接当前配置，最多并发 4 个，每项独立返回结果，部分失败不回滚成功连接。disconnect --all 清理当前用户运行的所有连接，包括已从配置删除的连接。任一失败整体退出非零。
 
@@ -73,4 +73,4 @@ connect --all 连接当前配置，最多并发 4 个，每项独立返回结果
 
 阶段 1–4 已实现并完成 Go 检查和真实 VNC/RDP 回环验证。阶段 5 已提供源码构建、安装说明与共用 Skill，尚未制作可搬运的二进制依赖包，也未完成各 Agent 客户端联调。实际覆盖和未完成项见 [验证记录](validation.md)。
 
-后续优先完成 macOS 屏幕共享、Windows RDP、Linux xrdp 实机矩阵，补齐证书/Unicode/会话策略互操作，然后再扩展本机平台、剪贴板和可选显示。维持两个公开 CLI 的职责边界，不引入与 remote-shell 重叠的任意 shell 执行接口。
+已完成配置中的 Linux VNC、macOS 屏幕共享和 Windows RDP 实机基础矩阵。后续优先处理 ARD 水平滚动、Mac 非 BMP 文本和 Windows 双轴滚轮兼容性，再覆盖 Linux xrdp、证书与会话策略互操作，然后再扩展本机平台、剪贴板和可选显示。维持两个公开 CLI 的职责边界，不引入与 remote-shell 重叠的任意 shell 执行接口。

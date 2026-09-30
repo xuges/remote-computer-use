@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>RCU GUI TEST</title>
+<style>
+body{font:18px monospace;margin:20px;background:#fff;color:#111}
+#pad{width:720px;height:180px;overflow:scroll;border:3px solid #357}
+#surface{width:1800px;height:1200px;background:repeating-linear-gradient(0deg,#def 0px,#def 49px,#acf 50px,#acf 99px);padding:15px;box-sizing:border-box}
+textarea{display:block;width:716px;height:80px;font:20px monospace;margin:12px 0}
+pre{font:16px monospace;white-space:pre-wrap;margin:6px 0}
+</style>
+<h2>RCU GUI TEST - temporary page</h2>
+<div id="pad" tabindex="0"><div id="surface">Mouse and scroll test area</div></div>
+<textarea id="input" placeholder="Type test text here"></textarea>
+<pre id="result"></pre>
+<script>
+const s={moves:0,down:[0,0,0],up:[0,0,0],clicks:0,double:0,wheel:0,dx:0,dy:0,x:0,y:0,scrollX:0,scrollY:0,held:[],keys:[0,0],lastKey:"",text:""};
+const pad=document.getElementById('pad'),input=document.getElementById('input'),out=document.getElementById('result');
+const show=()=>out.textContent=Object.entries(s).map(([k,v])=>k+': '+JSON.stringify(v)).join('\n');
+pad.onmousemove=e=>{s.moves++;s.x=e.offsetX;s.y=e.offsetY;show()};
+pad.onmousedown=e=>{s.down[e.button]++;show()};
+pad.onmouseup=e=>{s.up[e.button]++;show()};
+pad.onclick=e=>{s.clicks++;show()};pad.ondblclick=e=>{s.double++;show()};
+pad.oncontextmenu=e=>e.preventDefault();
+pad.onauxclick=e=>e.preventDefault();
+pad.addEventListener('wheel',e=>{s.wheel++;s.dx=e.deltaX;s.dy=e.deltaY;show()},{passive:true});
+pad.onscroll=e=>{s.scrollX=pad.scrollLeft;s.scrollY=pad.scrollTop;show()};
+document.onkeydown=e=>{s.keys[0]++;s.lastKey='down '+e.key;if(['Control','Shift','Alt','Meta'].includes(e.key)&&!s.held.includes(e.key))s.held.push(e.key);show()};
+document.onkeyup=e=>{s.keys[1]++;s.lastKey='up '+e.key;s.held=s.held.filter(k=>k!==e.key);show()};
+input.oninput=e=>{s.text=input.value;show()};show();
+</script>

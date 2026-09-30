@@ -101,7 +101,7 @@ password_env = "RCU_TEST_SECRET"
             call(USE, '--conn', 'test', 'click', '--x', '123', '--y', '234', '--count', '2')
             call(USE, '--conn', 'test', 'key', 'CTRL+L')
             call(USE, '--conn', 'test', 'type', '--stdin', input=b'Hi\n')
-            call(USE, '--conn', 'test', 'scroll', '--dy', '2')
+            call(USE, '--conn', 'test', 'scroll', '--dy', '2', '--dx', '2')
             call(USE, '--conn', 'test', 'drag', '--from', '30,40', '--to', '90,100', '--duration', '100ms')
             call(USE, '--conn', 'test', 'move', '--x', '640', '--y', '0', ok=False)
             call(USE, '--conn', 'test', 'move', '--x', '10', '--y', '10', '--geometry-version', str(state['geometry_version'] + 1), ok=False)
@@ -110,7 +110,7 @@ password_env = "RCU_TEST_SECRET"
             assert text.count('button down 1 123 234') == 2, text
             assert 'key down 65507' in text and 'key up 65507' in text, text
             assert 'button up 1 90 100' in text, text
-            assert 'button down 5' in text, text
+            assert 'button down 5' in text and 'button down 7' in text, text
             data = call(USE, '--conn', 'test', 'screenshot', '--output', '-').stdout
             assert Image.open(io.BytesIO(data)).convert('RGB').getpixel((15, 15)) == (255, 255, 0)
             # Closing the requesting process must release a button already sent remotely.
@@ -215,6 +215,20 @@ password_env = "RCU_TEST_SECRET"
                 call(USE, '--conn', 'rdp', 'click', '--x', '222', '--y', '111')
                 call(USE, '--conn', 'rdp', 'key', 'CTRL+A')
                 call(USE, '--conn', 'rdp', 'type', '--text', 'Hello')
+                # FreeRDP shadow maps horizontal rotation opposite to Windows RDP.
+                # Check event delivery here; direction is also verified on Windows.
+                wheel_start = len((tmp / 'events').read_text())
+                call(USE, '--conn', 'rdp', 'scroll', '--dx', '2', '--dy', '2')
+                time.sleep(.2)
+                wheel_events = (tmp / 'events').read_text()[wheel_start:]
+                assert 'button down 5' in wheel_events and 'button down 6' in wheel_events, wheel_events
+                assert 'button down 4' not in wheel_events and 'button down 7' not in wheel_events, wheel_events
+                wheel_start = len((tmp / 'events').read_text())
+                call(USE, '--conn', 'rdp', 'scroll', '--dx', '-2', '--dy', '-2')
+                time.sleep(.2)
+                wheel_events = (tmp / 'events').read_text()[wheel_start:]
+                assert 'button down 4' in wheel_events and 'button down 7' in wheel_events, wheel_events
+                assert 'button down 5' not in wheel_events and 'button down 6' not in wheel_events, wheel_events
                 time.sleep(.2)
                 assert 'button down 1 222 111' in (tmp / 'events').read_text()
                 call(CTL, 'disconnect', 'rdp', '--json')
