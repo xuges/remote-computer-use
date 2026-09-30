@@ -12,6 +12,7 @@ typedef struct {
     uint8_t *buffer;
     int tls;
     int fallback_available, retry_plain, tried_plain;
+    int ard;
 } vnc_state;
 static void quiet(const gchar *d, GLogLevelFlags l, const gchar *m, gpointer p) {
     (void)d;
@@ -62,6 +63,7 @@ static int offered(GValueArray *a, int type) {
 }
 static void choose_auth(VncConnection *c, GValueArray *a, gpointer p) {
     vnc_state *v = p;
+    v->ard = offered(a, VNC_CONNECTION_AUTH_ARD);
     // RFB 3.3 servers can reject a connection with security type zero (for
     // example, a temporary authentication blacklist). This is not a missing
     // client authentication implementation.
@@ -202,6 +204,10 @@ static int send_event(vnc_state *v, rcu_event e) {
             k |= 0x01000000;
         ok = vnc_connection_key_event(c, TRUE, k, 0) && vnc_connection_key_event(c, FALSE, k, 0);
     } else if (e.kind == 4) {
+        // Apple's VNC server maps horizontal-wheel buttons to clicks. Reject
+        // this unsupported action before sending any input to avoid misclicks.
+        if (v->ard && e.a)
+            return RCU_UNSUPPORTED;
         for (int axis = 0; axis < 2; axis++) {
             int delta = axis ? e.b : e.a;
             int button = axis ? (delta > 0 ? 5 : 4) : (delta > 0 ? 7 : 6);
