@@ -145,3 +145,9 @@ Windows 早先的完整安装/VNC 操作测试与 RDP shadow NLA 测试确实通
 文件 ACL 检查确认当前用户具备 FullControl，未发现文件权限错误。Windows Defender Operational 日志记录事件 1121，规则 GUID 为 `C1DB55AB-C21A-4637-BB3F-A12568109D35`；对应微软的 [Use advanced protection against ransomware](https://learn.microsoft.com/en-us/defender-endpoint/attack-surface-reduction-rules-reference#use-advanced-protection-against-ransomware)。这是已观察到的 ASR 拦截，不据此声称文件被确认含有恶意代码，也不能在没有进一步证据时断言具体触发行为。
 
 最终 Windows 包中 use.exe 的 SHA-256：`3d3f5071b6708833d55aa5f603d06edceb3cb50a9c2580476a586666c13f5de1`。本轮未关闭 Defender、未添加排除项、未修改服务端认证策略。Windows 开箱即用验收仍需解决正式签名/文件信誉或由机器管理员审核信任策略，再重跑测试；当前产物仅作为开发验证包交付。
+
+### Windows VNC 专项复查与拦截范围修正
+
+2026-09-30 后续复查中，同一已解压目录、同一 EXE 的完整 VNC 测试再次通过，涵盖 PNG/颜色、Unicode、键鼠、取消释放及重连；PowerShell 直接启动也恢复成功。但从发行包新解压到临时目录的安装测试仍在 `use.exe --version` 被拒绝，并新增同一 ASR 规则的事件 1121。因此应区分“Windows 原生 VNC 功能已通过”与“新安装流程仍存在 ASR 拦截”，不能笼统表述为该 EXE 始终无法启动。
+
+版本查询不会释放或加载协议 DLL，实际加载库的 doctor 通过，目前没有证据把拒绝归因于内嵌 DLL。具体观察、推断边界和后续方向见 [Windows 启动拦截分析](windows-asr.md)。Mac 的公证也不作为当前终端安装与运行的前置要求，分发方式的验收边界见 [安装说明](installation.md#windows-与-macos)。
