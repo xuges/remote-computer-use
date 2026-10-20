@@ -197,6 +197,10 @@ remote-computer-use --conn desktop pointer-up --button left
 
 ## AI Agent Skill
 
+让 AI 自己安装时，直接发送这句话：
+
+> 请阅读 [INSTALL.md](https://github.com/xuges/remote-computer-use/blob/main/INSTALL.md)，并按其中步骤安装 remote-computer-use 技能。
+
 共用 [remote-computer-use Skill](skills/remote-computer-use/SKILL.md)，不需要额外的 MCP 服务或三套不同命令协议。
 
 ```sh
