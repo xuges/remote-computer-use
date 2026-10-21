@@ -15,7 +15,7 @@
 
 让 AI 自己安装时，直接发送这句话：
 
-> 请阅读 [INSTALL.md](https://github.com/xuges/remote-computer-use/blob/main/INSTALL.md)，并按其中步骤安装 remote-computer-use 技能。
+> 请从仓库 <https://github.com/xuges/remote-computer-use> 克隆项目，并按 <https://raw.githubusercontent.com/xuges/remote-computer-use/main/INSTALL.md> 安装 remote-computer-use 技能。
 
 ## 支持平台与已知风险
 

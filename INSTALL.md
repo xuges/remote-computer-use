@@ -9,6 +9,17 @@
 
 本技能只负责远端 GUI 操作。远程命令和文件传输属于 `remote-shell`，本安装不包含它。本项目不需要 MCP 服务，也不要把它改造成 MCP 服务。更完整的发行包、缓存和安全说明见 `README.md` 与 `docs/installation.md`。
 
+项目仓库地址：<https://github.com/xuges/remote-computer-use>
+
+如果本机还没有源码，先克隆并进入仓库：
+
+```sh
+git clone https://github.com/xuges/remote-computer-use.git
+cd remote-computer-use
+```
+
+只用发行包安装时不需要克隆仓库；源码构建和使用 `scripts/install-skill.py` 时必须先取得仓库。
+
 ## 执行原则
 
 AI 安装时必须遵守以下约束：
@@ -231,7 +242,7 @@ Copy-Item .\skills\remote-computer-use\SKILL.md "$SkillsRoot\remote-computer-use
 
 ## 五、方式 B：从源码构建
 
-仅在用户已有仓库并同意安装构建依赖时使用。构建要求：Go 1.25.8+、C 编译器、CMake、pkg-config、libgvnc 1.3+、FreeRDP 3.25+。
+仅在用户已有仓库并同意安装构建依赖时使用。如果还没有仓库，按本文件开头的命令从 `https://github.com/xuges/remote-computer-use.git` 克隆。构建要求：Go 1.25.8+、C 编译器、CMake、pkg-config、libgvnc 1.3+、FreeRDP 3.25+。
 
 Ubuntu 示例（需要用户授权后才能使用 `sudo`）：
 
@@ -271,7 +282,7 @@ make native NATIVE_FLAGS='-DRCU_BUILD_RDP=OFF -DRCU_BUILD_VNC=ON'
 
 ## 六、方式 C：只安装 Skill
 
-仅当两个 CLI 已存在、版本正确，或用户明确只要求更新 Skill 时使用。
+仅当两个 CLI 已存在、版本正确，或用户明确只要求更新 Skill 时使用。如果还没有仓库，先执行本文件开头的 `git clone` 命令。
 
 在仓库根目录：
 
