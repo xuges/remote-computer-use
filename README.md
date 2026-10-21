@@ -11,6 +11,12 @@
 
 项目自身代码采用 [MIT License](LICENSE)。自包含包中的第三方库保留各自许可；发布时同时提供对应源码包，详见 [第三方许可与源码说明](THIRD_PARTY.md)。
 
+## AI 安装
+
+让 AI 自己安装时，直接发送这句话：
+
+> 请阅读 [INSTALL.md](https://github.com/xuges/remote-computer-use/blob/main/INSTALL.md)，并按其中步骤安装 remote-computer-use 技能。
+
 ## 支持平台与已知风险
 
 以下是运行命令行工具的**本机平台**；被操作的远端需启用兼容的 VNC / RDP 服务。
@@ -196,10 +202,6 @@ remote-computer-use --conn desktop pointer-up --button left
 运行目录为 `$XDG_RUNTIME_DIR/remote-computer-use`，未配置时使用 `/tmp/remote-computer-use-UID`，权限 0700。`REMOTE_COMPUTER_RUN_DIR` 可指定隔离目录；所有 CLI 必须使用同一目录。Windows 默认使用 `%LOCALAPPDATA%/remote-computer-use/run`，通过 DACL 保护。CLI 与 worker 使用带随机令牌的本机 HTTP，运行目录不再受 socket 路径长度限制；见 [HTTP 接口与转发规划](docs/http-ipc.md)。
 
 ## AI Agent Skill
-
-让 AI 自己安装时，直接发送这句话：
-
-> 请阅读 [INSTALL.md](https://github.com/xuges/remote-computer-use/blob/main/INSTALL.md)，并按其中步骤安装 remote-computer-use 技能。
 
 共用 [remote-computer-use Skill](skills/remote-computer-use/SKILL.md)，不需要额外的 MCP 服务或三套不同命令协议。
 
