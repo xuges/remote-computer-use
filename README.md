@@ -7,7 +7,7 @@
 
 与 [remote-shell](https://github.com/xuges/remote-shell) 独立互补：remote-shell 处理远程命令和文件，本项目处理 GUI。远端只需提供 VNC / RDP 服务，无需安装本项目的执行助手。本机不打开窗口，不依赖 DISPLAY、Wayland、Xvfb 或外部键鼠工具；截图来自协议解码后的内存画面。
 
-首版 **v0.1.0** 提供统一命令、后台连接、内嵌协议运行库及 Agent Skill。版本处于早期阶段，详细功能与限制见 [首版发布说明](docs/releases/v0.1.0.md)。
+当前版本 **v0.1.1** 提供统一命令、后台连接、内嵌协议运行库、跨命令保持输入及 Agent Skill。版本处于早期阶段，详细功能与限制见 [v0.1.1 发布说明](docs/releases/v0.1.1.md) 和 [首版发布说明](docs/releases/v0.1.0.md)。
 
 项目自身代码采用 [MIT License](LICENSE)。自包含包中的第三方库保留各自许可；发布时同时提供对应源码包，详见 [第三方许可与源码说明](THIRD_PARTY.md)。
 
@@ -36,14 +36,14 @@
 
 ## 快速安装
 
-从 [GitHub Releases](https://github.com/xuges/remote-computer-use/releases) 选择对应平台的 `remote-computer-use-0.1.0-<平台>` 包及同名 `.sha256` 文件。首版发布准备期间，以 Releases 页面实际列出的资产为准。自包含包运行时无需安装 Go、FreeRDP、libgvnc 或显示组件，也不需要管理员权限。
+从 [GitHub Releases](https://github.com/xuges/remote-computer-use/releases) 选择对应平台的 `remote-computer-use-0.1.1-<平台>` 包及同名 `.sha256` 文件，以 Releases 页面实际列出的资产为准。自包含包运行时无需安装 Go、FreeRDP、libgvnc 或显示组件，也不需要管理员权限。
 
 Linux x64 示例（macOS 使用 `shasum -a 256 -c` 校验并选择 `darwin-arm64` 包）：
 
 ```sh
-sha256sum -c remote-computer-use-0.1.0-linux-amd64.tar.gz.sha256
-tar -xzf remote-computer-use-0.1.0-linux-amd64.tar.gz
-cd remote-computer-use-0.1.0-linux-amd64
+sha256sum -c remote-computer-use-0.1.1-linux-amd64.tar.gz.sha256
+tar -xzf remote-computer-use-0.1.1-linux-amd64.tar.gz
+cd remote-computer-use-0.1.1-linux-amd64
 ./install.sh
 # 或同时安装 Agent Skill：./install.sh --agent codex
 export PATH="$HOME/.local/bin:$PATH"
@@ -159,7 +159,7 @@ remote-computer-use --conn windows scroll --dy 3
 
 组合键如 `CTRL+SHIFT+S`、`ALT+F4`、`CMD+L`、`WIN+R`、`ENTER`、`TAB`。按顺序按下、逆序释放；拖拽或组合键中途取消会尽力释放按下的键和按钮。
 
-开发版新增跨命令保持输入（`0.1.0` 包不包含此功能）。要验证“按住鼠标拖动时 Esc”，使用：
+`0.1.1` 新增跨命令保持输入（`0.1.0` 包不包含此功能）。要验证“按住鼠标拖动时 Esc”，使用：
 
 ```sh
 remote-computer-use --conn desktop pointer-down --x 100 --y 200 --button left

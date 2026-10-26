@@ -26,7 +26,7 @@
 Linux：
 
 ```sh
-VERSION=0.1.0
+VERSION=0.1.1
 ASSET=remote-computer-use-${VERSION}-linux-amd64.tar.gz
 sha256sum -c "${ASSET}.sha256"
 tar -xzf "$ASSET"
@@ -36,7 +36,7 @@ cd "remote-computer-use-${VERSION}-linux-amd64"
 macOS：
 
 ```sh
-VERSION=0.1.0
+VERSION=0.1.1
 ASSET=remote-computer-use-${VERSION}-darwin-arm64.tar.gz
 shasum -a 256 -c "${ASSET}.sha256"
 tar -xzf "$ASSET"
@@ -46,7 +46,7 @@ cd "remote-computer-use-${VERSION}-darwin-arm64"
 Windows PowerShell：
 
 ```powershell
-$Version = "0.1.0"
+$Version = "0.1.1"
 $Asset = "remote-computer-use-$Version-windows-amd64.zip"
 $expected = (Get-Content "$Asset.sha256").Split()[0].ToLower()
 $actual = (Get-FileHash -Algorithm SHA256 $Asset).Hash.ToLower()

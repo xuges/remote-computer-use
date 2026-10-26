@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
 
 - 新增 `pointer-down/up`、`key-down/up`、`release-input`，可跨命令组合拖动、修饰键和 Esc。
 - `move` 保留已按下的鼠标按钮，`key` 不释放此前显式保持的键。

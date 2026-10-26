@@ -39,7 +39,7 @@ codec cannot silently introduce an additional GPL dependency.
 
 ## Source and modification
 
-The release must provide `remote-computer-use-0.1.0-sources.tar.gz` and its
+The release must provide `remote-computer-use-<version>-sources.tar.gz` and its
 SHA-256 file alongside the binary downloads. This companion archive contains
 the corresponding native source packages, distribution patches and recipes,
 the project build scripts and source, and an index of source file hashes.
