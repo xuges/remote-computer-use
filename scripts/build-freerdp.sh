@@ -42,7 +42,7 @@ if [[ ! -d $source_dir ]]; then
     tar -xzf "$archive" -C "$root/.cache"
 fi
 cmake -S "$source_dir" -B "$build_dir" -G Ninja \
-    "${platform_flags[@]}" \
+    ${platform_flags[@]+"${platform_flags[@]}"} \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" \
     -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
     -DWITH_CLIENT=ON -DWITH_CLIENT_COMMON=ON -DWITH_CLIENT_INTERFACE=OFF -DWITH_CLIENT_CHANNELS=OFF \
